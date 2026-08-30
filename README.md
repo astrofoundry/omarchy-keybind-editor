@@ -14,12 +14,6 @@ dialog and the rebind applies immediately — no config editing, no reload.
 - Capturing a binding's original combo restores the default.
 - The stock read-only menu stays available via `omarchy menu keybindings`.
 
-![Keybindings list — every binding gets a Change button; rebound entries are marked "changed"](screenshots/list.png)
-
-![Capture dialog — press the new combination, Enter applies](screenshots/capture.png)
-
-![Conflict — the combo is taken; Enter overrides and unbinds it from the other action](screenshots/conflict.png)
-
 ## Install
 
 ```bash
@@ -35,6 +29,14 @@ idempotent. Then bind a key to the editor, e.g. in
 hl.unbind("SUPER + K") -- Previously: the read-only keybindings menu.
 o.bind("SUPER + K", "Keybindings", "omarchy-shell shell toggle astrofoundry.keybind-editor")
 ```
+
+## Screenshots
+
+![Keybindings list — every binding gets a Change button; rebound entries are marked "changed"](screenshots/list.png)
+
+![Capture dialog — press the new combination, Enter applies](screenshots/capture.png)
+
+![Conflict — the combo is taken; Enter overrides and unbinds it from the other action](screenshots/conflict.png)
 
 ## Usage
 
