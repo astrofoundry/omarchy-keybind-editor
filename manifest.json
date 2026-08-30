@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "astrofoundry.keybind-editor",
+  "name": "Keybind editor",
+  "version": "1.0.0",
+  "author": "astrofoundry",
+  "description": "Keybindings viewer with interactive rebinding",
+  "kinds": [
+    "overlay"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "overlay": "KeybindEditor.qml"
+  }
+}
