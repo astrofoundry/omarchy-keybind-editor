@@ -37,6 +37,10 @@ Item {
   property string capturedKeyToken: ""  // "code:45"
   property string capturedKeyLabel: "" // "é", "Enter", ...
   property var pendingMods: []     // modifiers held before a key lands
+  // Qt on Wayland does not report AltGr (ISO_Level3_Shift) as a modifier on
+  // subsequent key events — it shifts the produced symbol instead. Track the
+  // key itself so AltGr combos are capturable. XKB keycode 108 = right Alt.
+  property bool altgrHeld: false
   property string conflictText: ""
   property var conflictRow: null   // row currently holding the captured combo
   property bool applying: false
@@ -74,6 +78,7 @@ Item {
   }
 
   function close() {
+    if (root.captureOpen) root.setBindsSuspended(false)
     root.captureOpen = false
     root.opened = false
   }
@@ -175,8 +180,23 @@ Item {
     root.selectedIndex = index
   }
 
+  // While capturing, park Hyprland in an empty submap so no global bind
+  // matches — otherwise pressing an already-bound combo (e.g. Super+Return)
+  // fires its action instead of being captured. Reset is dispatched from
+  // every close path; if the shell ever dies mid-capture, recover with:
+  //   hyprctl dispatch submap reset
+  function setBindsSuspended(suspended) {
+    Quickshell.execDetached(["hyprctl", "dispatch", "submap", suspended ? "keybind-capture" : "reset"])
+  }
+
+  function isAltgrEvent(event) {
+    return event.key === Qt.Key_AltGr || event.key === Qt.Key_Mode_switch
+      || event.nativeScanCode === 108
+  }
+
   function openCapture(index) {
     if (index < 0 || index >= displayModel.count) return
+    root.altgrHeld = false
     root.captureRow = displayModel.get(index)
     root.capturedMods = []
     root.capturedKeyToken = ""
@@ -186,10 +206,13 @@ Item {
     root.conflictRow = null
     root.applying = false
     root.captureOpen = true
+    root.setBindsSuspended(true)
   }
 
   function closeCapture() {
+    if (root.captureOpen) root.setBindsSuspended(false)
     root.captureOpen = false
+    root.altgrHeld = false
     root.captureRow = null
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
@@ -230,7 +253,9 @@ Item {
 
     var bare = KeybindModel.modTokensFromQt(event.modifiers).length === 0
 
-    if (event.key === Qt.Key_Escape && bare && !root.capturedKeyToken) {
+    // Bare Escape always cancels — it is never capturable on its own.
+    // Modified combos (e.g. Super+Escape) remain bindable.
+    if (event.key === Qt.Key_Escape && bare && !root.altgrHeld) {
       root.closeCapture()
       return
     }
@@ -238,7 +263,8 @@ Item {
       root.applyCapture()
       return
     }
-    if (event.key === Qt.Key_Backspace && bare && root.capturedKeyToken) {
+    // Bare Backspace always clears (never capturable alone), like Escape.
+    if (event.key === Qt.Key_Backspace && bare && !root.altgrHeld) {
       root.capturedMods = []
       root.capturedKeyToken = ""
       root.capturedKeyLabel = ""
@@ -248,15 +274,19 @@ Item {
       return
     }
 
-    if (KeybindModel.isModifierKey(event.key)) {
+    if (KeybindModel.isModifierKey(event.key) || root.isAltgrEvent(event)) {
+      if (root.isAltgrEvent(event)) root.altgrHeld = true
       var held = KeybindModel.modTokensFromQt(event.modifiers)
       var own = KeybindModel.modTokenOfKey(event.key)
       if (own && held.indexOf(own) === -1) held.push(own)
+      if (root.altgrHeld && held.indexOf("MOD5") === -1) held.push("MOD5")
       root.pendingMods = held
       return
     }
 
-    root.capturedMods = KeybindModel.modTokensFromQt(event.modifiers)
+    var mods = KeybindModel.modTokensFromQt(event.modifiers)
+    if (root.altgrHeld && mods.indexOf("MOD5") === -1) mods.push("MOD5")
+    root.capturedMods = mods
     root.capturedKeyToken = "code:" + event.nativeScanCode
     var named = KeybindModel.qtKeyName(event.key)
     if (named) root.capturedKeyLabel = named
@@ -416,6 +446,12 @@ Item {
         focus: true
 
         Keys.priority: Keys.BeforeItem
+        Keys.onReleased: function(event) {
+          if (root.captureOpen && root.isAltgrEvent(event)) {
+            root.altgrHeld = false
+            event.accepted = true
+          }
+        }
         Keys.onPressed: function(event) {
           if (root.captureOpen) {
             root.handleCaptureKey(event)

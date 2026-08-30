@@ -13,6 +13,8 @@ root ships to users. `hypr/keybind-remap-hook.lua` is not loaded from here —
 
 ## Invariants
 
+- Commit messages carry NO AI attribution — no Co-Authored-By trailers, no
+  "Generated with" lines. Plain messages only.
 - `main` is the release channel: `omarchy plugin update` fast-forwards users
   to its tip. Keep `main` always releasable; develop on branches.
 - NEVER force-push or rebase `main` — the updater refuses non-fast-forward
