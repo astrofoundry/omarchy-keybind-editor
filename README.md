@@ -18,6 +18,8 @@ dialog and the rebind applies immediately — no config editing, no reload.
 
 ![Capture dialog — press the new combination, Enter applies](screenshots/capture.png)
 
+![Conflict — the combo is taken; Enter overrides and unbinds it from the other action](screenshots/conflict.png)
+
 ## Install
 
 ```bash
