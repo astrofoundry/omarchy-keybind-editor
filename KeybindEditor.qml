@@ -100,7 +100,8 @@ Item {
     repeat: false
     onTriggered: {
       if (root.lastFocusedAddress)
-        Quickshell.execDetached(["hyprctl", "dispatch", "focuswindow", "address:" + root.lastFocusedAddress])
+        root.dispatchCompat('hl.dsp.focus({ window = "address:' + root.lastFocusedAddress + '" })',
+                            "focuswindow address:" + root.lastFocusedAddress)
     }
   }
 
@@ -185,8 +186,17 @@ Item {
   // fires its action instead of being captured. Reset is dispatched from
   // every close path; if the shell ever dies mid-capture, recover with:
   //   hyprctl dispatch submap reset
+  // Hyprland's Lua-config builds evaluate `hyprctl dispatch` arguments as
+  // Lua, so use the hl.dsp form and fall back to the native dispatcher for
+  // non-Lua builds (the same pattern omarchy's own scripts use).
+  function dispatchCompat(luaExpr, nativeArgs) {
+    Quickshell.execDetached(["bash", "-c",
+      "hyprctl dispatch '" + luaExpr + "' 2>/dev/null || hyprctl dispatch " + nativeArgs])
+  }
+
   function setBindsSuspended(suspended) {
-    Quickshell.execDetached(["hyprctl", "dispatch", "submap", suspended ? "keybind-capture" : "reset"])
+    var name = suspended ? "keybind-capture" : "reset"
+    root.dispatchCompat('hl.dsp.submap("' + name + '")', "submap " + name)
   }
 
   function isAltgrEvent(event) {

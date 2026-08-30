@@ -24,8 +24,15 @@ hl = setmetatable({}, { __index = function() return stub end })
 
 hl.bind = function(keys, dispatcher, opts)
   local description = ""
-  if type(opts) == "table" and type(opts.description) == "string" then
-    description = opts.description
+  if type(opts) == "table" then
+    -- Submap-scoped binds (like the editor's own capture submap) are not
+    -- part of the global keymap; don't list them.
+    if opts.submap ~= nil and opts.submap ~= "" then
+      return
+    end
+    if type(opts.description) == "string" then
+      description = opts.description
+    end
   end
   io.write("BIND\t", tostring(keys), "\t", (description:gsub("[\t\n]", " ")), "\n")
 end

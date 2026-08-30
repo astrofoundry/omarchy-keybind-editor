@@ -32,6 +32,16 @@ local function normalize(combo)
   return table.concat(mods, "+")
 end
 
+-- Register the capture submap: the editor parks Hyprland here while its
+-- capture dialog is open, so no global bind fires while pressing a combo.
+-- A submap only exists once a bind is registered in it; Escape doubles as a
+-- compositor-level escape hatch if the shell ever dies mid-capture.
+pcall(function()
+  hl.define_submap("keybind-capture", function()
+    hl.bind("ESCAPE", hl.dsp.submap("reset"), { description = "Exit keybind capture" })
+  end)
+end)
+
 -- Refresh the table on every config reload (bootstrap.lua clears hypr.*
 -- modules from package.loaded, so the require re-reads the file).
 local ok, remaps = pcall(require, "hypr.keybind-remaps")
