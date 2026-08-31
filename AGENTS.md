@@ -36,8 +36,9 @@ Commit the work first, then run:
 
 The script verifies a clean tree on an up-to-date `main`, validates the
 plugin, bumps `version` in `manifest.json` as its own commit, tags
-`v<version>`, and pushes branch and tag. Tag every release; never move a
-published tag.
+`v<version>`, pushes branch and tag, and publishes a GitHub release whose
+notes are the commit subjects since the last tag (needs `gh` logged in).
+Tag every release; never move a published tag.
 
 Semver: patch = fix, minor = feature, major = breaking or anything that
 needs user action (e.g. re-running `install.sh`).

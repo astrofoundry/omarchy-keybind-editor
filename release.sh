@@ -1,5 +1,5 @@
 #!/bin/bash
-# Release: bump manifest version, commit, tag, push — in one go.
+# Release: bump manifest version, commit, tag, push, publish GitHub release.
 #
 # Usage: ./release.sh <patch|minor|major> [--dry-run]
 #
@@ -42,14 +42,26 @@ git rev-parse -q --verify "refs/tags/v$next" >/dev/null \
 # The hook is installed into ~/.config/hypr by install.sh, so plugin update
 # alone does not deliver changes to it — users must re-run install.sh.
 last_tag=$(git describe --tags --abbrev=0 2>/dev/null || true)
+reinstall_note=""
 if [[ -n $last_tag ]] && ! git diff --quiet "$last_tag" HEAD -- hypr/ install.sh; then
   echo "NOTE: hypr/ or install.sh changed since $last_tag."
   echo "      Users must re-run install.sh — say so in the release notes."
+  reinstall_note="**Re-run \`install.sh\`** — this release changes the config-side hook."
 fi
+
+# Release notes: commit subjects since the last tag, short and plain.
+if [[ -n $last_tag ]]; then
+  notes=$(git log --format='- %s' "$last_tag"..HEAD)
+else
+  notes="Initial release."
+fi
+[[ -n $reinstall_note ]] && notes="$reinstall_note"$'\n\n'"$notes"
 
 echo "release: $current -> $next ($bump)"
 if (( dry_run )); then
   echo "release: dry run, stopping before any change"
+  echo "release: GitHub release notes would be:"
+  echo "$notes"
   exit 0
 fi
 
@@ -60,4 +72,9 @@ git commit -q -m "Release v$next"
 git tag "v$next"
 git push -q origin main "v$next"
 
-echo "release: v$next pushed (commit $(git rev-parse --short HEAD))"
+gh release create "v$next" --title "v$next" --notes "$notes" \
+  || { echo "release: tag v$next pushed, but GitHub release failed." >&2
+       echo "         retry with: gh release create v$next --title v$next --notes-from-tag" >&2
+       exit 1; }
+
+echo "release: v$next pushed and released (commit $(git rev-parse --short HEAD))"
