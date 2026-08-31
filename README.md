@@ -1,7 +1,7 @@
 # Astro Keybind Editor
 
-An [Omarchy](https://omarchy.org) shell plugin that turns the keybindings
-viewer into an editor. It lists every effective Hyprland binding with a
+A shell plugin for [Omarchy](https://omarchy.org) Quattro that turns the
+keybindings viewer into an editor. It lists every effective Hyprland binding with a
 **Change** button. Press the new combination in a capture dialog and the
 rebind applies immediately. No config editing, no reload.
 
