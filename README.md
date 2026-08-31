@@ -75,8 +75,6 @@ hook, the release notes tell you to re-run `install.sh`.
   </tr>
 </table>
 
-Click a thumbnail for full size.
-
 ## Usage
 
 - Type to search. Arrows to navigate.
