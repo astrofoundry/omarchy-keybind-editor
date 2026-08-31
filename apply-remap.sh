@@ -58,7 +58,7 @@ mv "$tmp" "$file"
 hyprctl reload >/dev/null
 errors=$(hyprctl configerrors 2>/dev/null || true)
 if [[ -n $errors && ${errors,,} != *"no errors"* ]]; then
-  omarchy-notification-send "Keybind editor" "Hyprland config error: $errors" >/dev/null 2>&1 || true
+  omarchy-notification-send "Astro Keybind Editor" "Hyprland config error: $errors" >/dev/null 2>&1 || true
   echo "$errors" >&2
   exit 1
 fi

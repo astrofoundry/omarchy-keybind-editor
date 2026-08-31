@@ -25,7 +25,7 @@ install -m 0644 "$src_dir/hypr/keybind-remap-hook.lua" "$hypr_dir/keybind-remap-
 
 if [[ ! -f $hypr_dir/keybind-remaps.lua ]]; then
   cat >"$hypr_dir/keybind-remaps.lua" <<'EOF'
--- Managed by the keybind editor plugin (astrofoundry.keybind-editor).
+-- Managed by the Astro Keybind Editor plugin (astrofoundry.keybind-editor).
 -- Maps an original key combo (normalized) to its replacement.
 -- An empty replacement removes the bind entirely (editor override).
 -- Applied by ~/.config/hypr/keybind-remap-hook.lua as binds register.
@@ -38,7 +38,7 @@ if ! grep -qF "$require_line" "$main"; then
   cp "$main" "$main.bak.keybind-editor"
   if ! awk -v line="$require_line" '
     !done && /require\("default\.hypr\.omarchy"\)/ {
-      print "-- Keybind editor remap layer; must load before the Omarchy defaults."
+      print "-- Astro Keybind Editor remap layer; must load before the Omarchy defaults."
       print line
       print ""
       done = 1
@@ -63,7 +63,7 @@ if [[ -n $errors && ${errors,,} != *"no errors"* ]]; then
 fi
 
 cat <<'EOF'
-Keybind editor hook installed.
+Astro Keybind Editor hook installed.
 
 Open the editor with:
   omarchy-shell shell toggle astrofoundry.keybind-editor

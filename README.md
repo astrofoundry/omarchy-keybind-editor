@@ -1,4 +1,4 @@
-# Keybind Editor
+# Astro Keybind Editor
 
 An [Omarchy](https://omarchy.org) shell plugin that turns the keybindings
 viewer into an editor. It lists every effective Hyprland binding with a
