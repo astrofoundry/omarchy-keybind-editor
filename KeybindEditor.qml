@@ -158,12 +158,16 @@ Item {
       var row = root.rows[i]
       if (filter && row.description.toLowerCase().indexOf(filter) === -1
           && row.comboPretty.toLowerCase().indexOf(filter) === -1) continue
+      var original = root.originalFor(row.normalized)
+      var isCustom = !!root.customBinds[original]
       displayModel.append({
         normalized: row.normalized,
         comboPretty: row.comboPretty,
         description: row.description,
-        changed: root.originalFor(row.normalized) !== row.normalized,
-        custom: !!root.customBinds[root.originalFor(row.normalized)]
+        // A custom bind is updated in place, so it has no default to mark a
+        // change against; a legacy remap entry may still redirect it.
+        changed: original !== row.normalized && !isCustom,
+        custom: isCustom
       })
     }
     if (displayModel.count === 0) selectedIndex = 0
@@ -457,16 +461,27 @@ Item {
     var raw = root.capturedRaw()
     if (!raw || !root.captureRow) return
     var original = root.originalFor(root.captureRow.normalized)
-    var restoresDefault = KeybindModel.canonicalCombo(KeybindModel.normalize(raw), root.activeSymToCode)
-      === KeybindModel.canonicalCombo(original, root.activeSymToCode)
-    var ops = restoresDefault
-      ? ["delete", original]
-      : ["set", original, raw]
-    // Overriding a conflict removes the combo from the action that held it.
-    if (root.conflictRow)
-      ops = ops.concat(["disable", root.originalFor(root.conflictRow.normalized)])
+    var custom = root.customBinds[original]
+    var cmd
+    if (custom) {
+      // Custom binds are rewritten in place in bindings.lua; the extra args
+      // are apply-remap.sh ops for a legacy remap entry and any conflict.
+      cmd = [root.pluginDir + "/update-bind.sh", custom.combo, raw]
+      if (original !== root.captureRow.normalized) cmd.push("delete", original)
+      if (root.conflictRow) cmd.push("disable", root.originalFor(root.conflictRow.normalized))
+    } else {
+      var restoresDefault = KeybindModel.canonicalCombo(KeybindModel.normalize(raw), root.activeSymToCode)
+        === KeybindModel.canonicalCombo(original, root.activeSymToCode)
+      var ops = restoresDefault
+        ? ["delete", original]
+        : ["set", original, raw]
+      // Overriding a conflict removes the combo from the action that held it.
+      if (root.conflictRow)
+        ops = ops.concat(["disable", root.originalFor(root.conflictRow.normalized)])
+      cmd = [root.pluginDir + "/apply-remap.sh"].concat(ops)
+    }
     root.applying = true
-    applyProc.command = [root.pluginDir + "/apply-remap.sh"].concat(ops)
+    applyProc.command = cmd
     applyProc.running = true
   }
 
