@@ -46,6 +46,16 @@ Item {
   property bool applying: false
   property color warningColor: "#f2994a"
 
+  // Reset confirmation dialog state.
+  property bool resetOpen: false
+  property var resetRow: null      // changed row being reset to its default
+
+  // Add-custom-bind dialog state. Stage 0 captures the combo (binds
+  // suspended, like the capture dialog); stages 1 and 2 are plain text
+  // entry for the description and the command.
+  property bool addOpen: false
+  property int addStage: 0
+
   property color background: Color.menu.background
   property color foreground: Color.menu.text
   property color border: Color.menu.border
@@ -78,8 +88,13 @@ Item {
   }
 
   function close() {
-    if (root.captureOpen) root.setBindsSuspended(false)
+    if (root.captureOpen || (root.addOpen && root.addStage === 0))
+      root.setBindsSuspended(false)
     root.captureOpen = false
+    root.resetOpen = false
+    root.resetRow = null
+    root.addOpen = false
+    root.addStage = 0
     root.opened = false
   }
 
@@ -227,6 +242,75 @@ Item {
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
+  function openAdd() {
+    root.altgrHeld = false
+    root.captureRow = null
+    root.capturedMods = []
+    root.capturedKeyToken = ""
+    root.capturedKeyLabel = ""
+    root.pendingMods = []
+    root.conflictText = ""
+    root.conflictRow = null
+    root.applying = false
+    root.addStage = 0
+    addDescriptionInput.text = ""
+    addCommandInput.text = ""
+    root.addOpen = true
+    root.setBindsSuspended(true)
+  }
+
+  function closeAdd() {
+    if (root.addOpen && root.addStage === 0) root.setBindsSuspended(false)
+    root.addOpen = false
+    root.addStage = 0
+    root.altgrHeld = false
+    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+  }
+
+  function advanceAdd() {
+    if (root.applying) return
+    if (root.addStage === 0) {
+      // A taken combo blocks here: adding would duplicate an existing bind.
+      if (!root.capturedRaw() || root.conflictRow) return
+      root.setBindsSuspended(false)
+      root.addStage = 1
+      Qt.callLater(function() { addDescriptionInput.forceActiveFocus() })
+    } else if (root.addStage === 1) {
+      if (!addDescriptionInput.text.trim()) return
+      root.addStage = 2
+      Qt.callLater(function() { addCommandInput.forceActiveFocus() })
+    } else {
+      if (!addCommandInput.text.trim()) return
+      root.applying = true
+      applyProc.command = [root.pluginDir + "/add-bind.sh", root.capturedRaw(),
+                           addDescriptionInput.text.trim(), addCommandInput.text.trim()]
+      applyProc.running = true
+    }
+  }
+
+  // No submap suspension here: the dialog only confirms, it captures no keys.
+  function openReset(index) {
+    if (index < 0 || index >= displayModel.count) return
+    root.resetRow = displayModel.get(index)
+    root.conflictText = ""
+    root.applying = false
+    root.resetOpen = true
+  }
+
+  function closeReset() {
+    root.resetOpen = false
+    root.resetRow = null
+    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+  }
+
+  function applyReset() {
+    if (!root.resetRow || root.applying) return
+    root.applying = true
+    applyProc.command = [root.pluginDir + "/apply-remap.sh",
+                         "delete", root.originalFor(root.resetRow.normalized)]
+    applyProc.running = true
+  }
+
   function capturedRaw() {
     if (!root.capturedKeyToken) return ""
     return KeybindModel.rawCombo(root.capturedMods, root.capturedKeyToken)
@@ -244,14 +328,17 @@ Item {
     root.conflictText = ""
     root.conflictRow = null
     var raw = root.capturedRaw()
-    if (!raw || !root.captureRow) return
+    if (!raw) return
     var canonical = KeybindModel.canonicalCombo(KeybindModel.normalize(raw), root.activeSymToCode)
-    if (canonical === KeybindModel.canonicalCombo(root.captureRow.normalized, root.activeSymToCode)) return
+    // Rebinding a row to its own combo is not a conflict; adding has no self.
+    if (root.captureRow
+        && canonical === KeybindModel.canonicalCombo(root.captureRow.normalized, root.activeSymToCode)) return
     for (var i = 0; i < root.rows.length; i++) {
       if (KeybindModel.canonicalCombo(root.rows[i].normalized, root.activeSymToCode) === canonical) {
         root.conflictRow = root.rows[i]
         root.conflictText = "Already bound: " + root.rows[i].description
-          + " — Enter overrides and removes it there"
+          + (root.addOpen ? " — press another combination"
+                          : " — Enter overrides and removes it there")
         return
       }
     }
@@ -266,11 +353,13 @@ Item {
     // Bare Escape always cancels — it is never capturable on its own.
     // Modified combos (e.g. Super+Escape) remain bindable.
     if (event.key === Qt.Key_Escape && bare && !root.altgrHeld) {
-      root.closeCapture()
+      if (root.addOpen) root.closeAdd()
+      else root.closeCapture()
       return
     }
     if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && bare) {
-      root.applyCapture()
+      if (root.addOpen) root.advanceAdd()
+      else root.applyCapture()
       return
     }
     // Bare Backspace always clears (never capturable alone), like Escape.
@@ -401,6 +490,8 @@ Item {
       root.applying = false
       if (exitCode === 0) {
         root.closeCapture()
+        root.closeReset()
+        root.closeAdd()
         bindsProc.running = true
       } else {
         root.conflictText = "Apply failed — see notification"
@@ -457,7 +548,7 @@ Item {
 
         Keys.priority: Keys.BeforeItem
         Keys.onReleased: function(event) {
-          if (root.captureOpen && root.isAltgrEvent(event)) {
+          if ((root.captureOpen || (root.addOpen && root.addStage === 0)) && root.isAltgrEvent(event)) {
             root.altgrHeld = false
             event.accepted = true
           }
@@ -465,6 +556,24 @@ Item {
         Keys.onPressed: function(event) {
           if (root.captureOpen) {
             root.handleCaptureKey(event)
+            return
+          }
+
+          if (root.addOpen) {
+            // Stage 0 captures the combo; later stages keep focus in a
+            // TextInput and only a stray Escape lands here.
+            if (root.addStage === 0) root.handleCaptureKey(event)
+            else if (event.key === Qt.Key_Escape) {
+              root.closeAdd()
+              event.accepted = true
+            }
+            return
+          }
+
+          if (root.resetOpen) {
+            if (event.key === Qt.Key_Escape) root.closeReset()
+            else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) root.applyReset()
+            event.accepted = true
             return
           }
 
@@ -546,6 +655,37 @@ Item {
             spacing: Style.space(4)
             boundsBehavior: Flickable.StopAtBounds
 
+            footer: Item {
+              width: resultList.width
+              height: root.rowHeight + Style.space(4)
+
+              Rectangle {
+                anchors.fill: parent
+                anchors.topMargin: Style.space(4)
+                radius: root.cornerRadius
+                color: addRowArea.containsMouse ? root.selectedBackground : "transparent"
+
+                Text {
+                  anchors.verticalCenter: parent.verticalCenter
+                  anchors.left: parent.left
+                  anchors.leftMargin: Style.space(12)
+                  text: "+ Add custom keybinding"
+                  color: addRowArea.containsMouse ? root.selectedText : root.foreground
+                  opacity: addRowArea.containsMouse ? 1 : 0.55
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.body
+                }
+
+                MouseArea {
+                  id: addRowArea
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.openAdd()
+                }
+              }
+            }
+
             delegate: Rectangle {
               id: row
               required property int index
@@ -596,11 +736,35 @@ Item {
                     Text {
                       visible: row.changed
                       anchors.verticalCenter: parent.verticalCenter
-                      text: "· changed"
-                      color: row.hasCursor ? root.selectedText : root.foreground
-                      opacity: 0.55
+                      // Fixed to the wider label so the hover swap cannot
+                      // shrink the hit area under the pointer and flicker.
+                      width: badgeMetrics.width
+                      text: badgeArea.containsMouse ? "· reset" : "· changed"
+                      color: badgeArea.containsMouse ? root.warningColor
+                           : (row.hasCursor ? root.selectedText : root.foreground)
+                      opacity: badgeArea.containsMouse ? 1 : 0.55
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.caption
+
+                      TextMetrics {
+                        id: badgeMetrics
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.caption
+                        text: "· changed"
+                      }
+
+                      MouseArea {
+                        id: badgeArea
+                        anchors.fill: parent
+                        anchors.margins: -Style.space(4)
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                          root.cursorActive = true
+                          root.selectedIndex = row.index
+                          root.openReset(row.index)
+                        }
+                      }
                     }
                   }
                 }
@@ -787,6 +951,247 @@ Item {
             Text {
               width: parent.width
               text: root.applying ? "Applying…" : "Enter apply · Esc cancel · Backspace clear"
+              color: root.foreground
+              opacity: 0.4
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              horizontalAlignment: Text.AlignHCenter
+            }
+          }
+        }
+      }
+
+      // Reset confirmation popin.
+      Rectangle {
+        anchors.fill: parent
+        visible: root.resetOpen
+        color: root.scrim
+        radius: root.cornerRadius
+
+        MouseArea { anchors.fill: parent; onClicked: root.closeReset() }
+
+        BorderSurface {
+          width: Math.min(Style.space(480), parent.width - Style.space(40))
+          height: resetColumn.implicitHeight + Style.space(48)
+          radius: root.cornerRadius
+          anchors.centerIn: parent
+          color: root.background
+          borderSpec: root.borderSpec
+
+          MouseArea { anchors.fill: parent; onClicked: {} }
+
+          Column {
+            id: resetColumn
+            anchors.centerIn: parent
+            width: parent.width - Style.space(48)
+            spacing: Style.space(14)
+
+            Text {
+              width: parent.width
+              text: root.resetRow ? root.resetRow.description : ""
+              color: root.foreground
+              opacity: 0.55
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              horizontalAlignment: Text.AlignHCenter
+              elide: Text.ElideMiddle
+            }
+
+            Text {
+              width: parent.width
+              text: root.resetRow
+                  ? "Reset " + root.resetRow.comboPretty + " to its default "
+                    + KeybindModel.prettyCombo(root.originalFor(root.resetRow.normalized), root.xkbMap) + "?"
+                  : ""
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              horizontalAlignment: Text.AlignHCenter
+              wrapMode: Text.Wrap
+            }
+
+            Text {
+              width: parent.width
+              visible: root.conflictText !== ""
+              text: "⚠ " + root.conflictText
+              color: root.warningColor
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              horizontalAlignment: Text.AlignHCenter
+              wrapMode: Text.Wrap
+            }
+
+            Text {
+              width: parent.width
+              text: root.applying ? "Applying…" : "Enter reset · Esc cancel"
+              color: root.foreground
+              opacity: 0.4
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              horizontalAlignment: Text.AlignHCenter
+            }
+          }
+        }
+      }
+
+      // Add-custom-bind popin: combo capture, then description, then command.
+      Rectangle {
+        anchors.fill: parent
+        visible: root.addOpen
+        color: root.scrim
+        radius: root.cornerRadius
+
+        MouseArea { anchors.fill: parent; onClicked: root.closeAdd() }
+
+        BorderSurface {
+          width: Math.min(Style.space(480), parent.width - Style.space(40))
+          height: addColumn.implicitHeight + Style.space(48)
+          radius: root.cornerRadius
+          anchors.centerIn: parent
+          color: root.background
+          borderSpec: root.borderSpec
+
+          MouseArea { anchors.fill: parent; onClicked: {} }
+
+          Column {
+            id: addColumn
+            anchors.centerIn: parent
+            width: parent.width - Style.space(48)
+            spacing: Style.space(14)
+
+            Text {
+              width: parent.width
+              text: "Add custom keybinding"
+              color: root.foreground
+              opacity: 0.55
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              horizontalAlignment: Text.AlignHCenter
+            }
+
+            Text {
+              width: parent.width
+              text: root.addStage === 0 ? "Press desired key combination and then press ENTER."
+                  : root.addStage === 1 ? "Describe what the binding does."
+                  : "Enter the command to run."
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              horizontalAlignment: Text.AlignHCenter
+              wrapMode: Text.Wrap
+            }
+
+            Rectangle {
+              width: parent.width
+              height: Style.space(38)
+              radius: root.cornerRadius
+              color: "transparent"
+              border.color: root.conflictRow ? root.warningColor
+                          : (root.addStage === 0 ? root.selectedBackground : Util.alpha(root.foreground, 0.25))
+              border.width: root.addStage === 0 ? 2 : 1
+
+              Text {
+                anchors.centerIn: parent
+                text: root.capturedRaw()
+                    ? KeybindModel.prettyCombo(root.capturedRaw(), root.xkbMap)
+                    : (root.pendingMods.length > 0
+                        ? KeybindModel.rawCombo(root.pendingMods.map(KeybindModel.prettyMod), "…")
+                        : "…")
+                color: root.foreground
+                opacity: root.capturedRaw() ? 1 : 0.45
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+              }
+            }
+
+            Rectangle {
+              visible: root.addStage >= 1
+              width: parent.width
+              height: Style.space(38)
+              radius: root.cornerRadius
+              color: "transparent"
+              border.color: root.addStage === 1 ? root.selectedBackground : Util.alpha(root.foreground, 0.25)
+              border.width: root.addStage === 1 ? 2 : 1
+
+              TextInput {
+                id: addDescriptionInput
+                anchors.fill: parent
+                anchors.leftMargin: Style.space(12)
+                anchors.rightMargin: Style.space(12)
+                verticalAlignment: TextInput.AlignVCenter
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                clip: true
+                onAccepted: root.advanceAdd()
+                Keys.onEscapePressed: root.closeAdd()
+              }
+
+              Text {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(12)
+                visible: addDescriptionInput.text === ""
+                text: "Description, e.g. Screenshot region to clipboard"
+                color: root.foreground
+                opacity: 0.35
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+              }
+            }
+
+            Rectangle {
+              visible: root.addStage >= 2
+              width: parent.width
+              height: Style.space(38)
+              radius: root.cornerRadius
+              color: "transparent"
+              border.color: root.addStage === 2 ? root.selectedBackground : Util.alpha(root.foreground, 0.25)
+              border.width: 2
+
+              TextInput {
+                id: addCommandInput
+                anchors.fill: parent
+                anchors.leftMargin: Style.space(12)
+                anchors.rightMargin: Style.space(12)
+                verticalAlignment: TextInput.AlignVCenter
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                clip: true
+                onAccepted: root.advanceAdd()
+                Keys.onEscapePressed: root.closeAdd()
+              }
+
+              Text {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(12)
+                visible: addCommandInput.text === ""
+                text: "Command, e.g. omarchy capture screenshot region copy"
+                color: root.foreground
+                opacity: 0.35
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+              }
+            }
+
+            Text {
+              width: parent.width
+              visible: root.conflictText !== ""
+              text: "⚠ " + root.conflictText
+              color: root.warningColor
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              horizontalAlignment: Text.AlignHCenter
+              wrapMode: Text.Wrap
+            }
+
+            Text {
+              width: parent.width
+              text: root.applying ? "Applying…"
+                  : (root.addStage === 0 ? "Enter next · Esc cancel · Backspace clear"
+                                         : "Enter " + (root.addStage === 2 ? "apply" : "next") + " · Esc cancel")
               color: root.foreground
               opacity: 0.4
               font.family: root.fontFamily
