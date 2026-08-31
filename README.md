@@ -30,6 +30,16 @@ hl.unbind("SUPER + K") -- Previously: the read-only keybindings menu.
 o.bind("SUPER + K", "Keybindings", "omarchy-shell shell toggle astrofoundry.keybind-editor")
 ```
 
+### Updating
+
+```bash
+omarchy plugin update astrofoundry.keybind-editor --yes
+```
+
+Without `--yes`, the command first shows the incoming changes in a pager
+(`q` to close) and asks for confirmation. When a release changes the
+config-side hook, its release notes say to re-run `install.sh`.
+
 ## Screenshots
 
 ![Keybindings list — every binding gets a Change button; rebound entries are marked "changed"](screenshots/list.png)
