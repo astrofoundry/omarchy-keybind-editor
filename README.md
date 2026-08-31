@@ -2,36 +2,32 @@
 
 An [Omarchy](https://omarchy.org) shell plugin that turns the keybindings
 viewer into an editor. It lists every effective Hyprland binding with a
-**Change** button; press the new combination in a VS Code-style capture
-dialog and the rebind applies immediately, with no config editing and no
-reload.
+**Change** button. Press the new combination in a capture dialog and the
+rebind applies immediately. No config editing, no reload.
 
-- Works on **any** binding, including Omarchy defaults, without knowing what
-  the binding does.
-- Conflicts show in orange; applying anyway removes the combo from the
-  action that held it.
-- Rebinds are stored in one plain file, `~/.config/hypr/keybind-remaps.lua`,
-  easy to review, version, or copy to another machine.
-- Capturing a binding's original combo restores the default.
-- The stock read-only menu stays available via `omarchy menu keybindings`.
+- Rebinds any binding, including Omarchy defaults, without knowing what it
+  does.
+- Conflicts show in orange. Apply anyway and the combo moves off the other
+  action.
+- All rebinds live in one file: `~/.config/hypr/keybind-remaps.lua`. Review
+  it, version it, or copy it to another machine.
+- Capture a binding's original combo to restore its default.
+- The stock read-only menu stays available: `omarchy menu keybindings`.
 
 ![Demo: rebinding with conflict override, reset to default, and adding a custom binding](screenshots/demo.gif)
 
 ## Install
-
-Listed on the [Omarchy plugin marketplace](https://plugins.omarchy.org/plugin.html?id=astrofoundry.keybind-editor)
-(verified, maintainer-reviewed). The marketplace install command is the same
-as below: Omarchy clones this repository, validates it locally, then
-installs and enables the plugin.
 
 ```bash
 omarchy plugin add https://github.com/astrofoundry/omarchy-keybind-editor.git --enable
 bash ~/.config/omarchy/plugins/astrofoundry.keybind-editor/install.sh
 ```
 
-The second step installs the config-side hook (see *How it works*) and is
-idempotent. Then bind a key to the editor, e.g. in
-`~/.config/hypr/bindings.lua`:
+The second command installs the config-side hook (see *How it works*). It is
+safe to run again. Also on the
+[Omarchy plugin marketplace](https://plugins.omarchy.org/plugin.html?id=astrofoundry.keybind-editor).
+
+Then bind a key to the editor in `~/.config/hypr/bindings.lua`:
 
 ```lua
 hl.unbind("SUPER + K") -- Previously: the read-only keybindings menu.
@@ -44,9 +40,9 @@ o.bind("SUPER + K", "Keybindings", "omarchy-shell shell toggle astrofoundry.keyb
 omarchy plugin update astrofoundry.keybind-editor --yes
 ```
 
-Without `--yes`, the command first shows the incoming changes in a pager
-(`q` to close) and asks for confirmation. When a release changes the
-config-side hook, its release notes say to re-run `install.sh`.
+Without `--yes` the command shows the incoming changes in a pager (`q` to
+close) and asks for confirmation. When a release changes the config-side
+hook, the release notes tell you to re-run `install.sh`.
 
 ## Screenshots
 
@@ -62,50 +58,48 @@ config-side hook, its release notes say to re-run `install.sh`.
 
 ## Usage
 
-- Type to search; arrows to navigate.
+- Type to search. Arrows to navigate.
 - **Enter** or the **Change** button opens the capture dialog for a row.
-- Press the new combination, then **Enter** to apply. **Backspace** clears,
+- Press the new combination, then **Enter** to apply. **Backspace** clears.
   **Esc** cancels.
-- An orange warning means the combo is taken; **Enter** overrides and unbinds
-  it from the other action.
-- To restore a binding's default, capture its original combination.
-- To restore a binding's default without recapturing it, hover its
-  *changed* marker (it turns into **reset**) and click; a confirmation
-  dialog applies the reset.
-- The **+ Add custom…** button (top right) creates a new binding in three
-  steps: press the combo (taken combos are refused), type a description,
-  type the command. The binding is appended as an `o.bind(...)` line to
-  `~/.config/hypr/bindings.lua`; a failed reload rolls the file back.
+- An orange warning means the combo is taken. **Enter** applies anyway and
+  unbinds it from the other action.
+- To restore a default, capture the binding's original combination.
+- Faster: hover the *changed* marker until it reads **reset**, click, and
+  confirm.
+- The **+ Add custom…** button (top right) creates a new binding: press the
+  combo (taken combos are refused), type a description, type the command.
+  It lands as an `o.bind(...)` line in `~/.config/hypr/bindings.lua`. A
+  failed reload rolls the file back.
 - To restore an overridden (removed) binding, delete its empty-value line in
   `~/.config/hypr/keybind-remaps.lua`.
 
 ## Backup
 
-All your rebinds live in one file: `~/.config/hypr/keybind-remaps.lua`.
-Three levels, from manual to automatic:
+All rebinds live in one file: `~/.config/hypr/keybind-remaps.lua`. Three
+options, from manual to automatic:
 
-**Copy the file.** Back up by copying it anywhere; restore by copying it
-back and running `hyprctl reload`.
+**Copy the file.** Copy it anywhere to back up. Copy it back and run
+`hyprctl reload` to restore.
 
 **Version it in a dotfiles repo.** Move the file into your repo and leave a
-symlink behind; the editor writes through the symlink:
+symlink. The editor writes through the symlink:
 
 ```bash
 mv ~/.config/hypr/keybind-remaps.lua ~/dotfiles/keybind-remaps.lua
 ln -s ~/dotfiles/keybind-remaps.lua ~/.config/hypr/keybind-remaps.lua
 ```
 
-**Act on every change.** After each successful rebind the editor fires the
+**Run a script on every change.** After each rebind the editor fires the
 `keybind-remap` hook with the applied operations as arguments
-(`set <original> <replacement>`, `delete <original>`, or
-`disable <original>`). Install any script Omarchy-hook style:
+(`set <original> <replacement>`, `delete <original>`, `disable <original>`).
+Install a script:
 
 ```bash
 omarchy hook install keybind-remap my-script.sh
 ```
 
-For example, combined with the symlink above, this auto-commits every
-rebind:
+Combined with the symlink above, this script commits every rebind:
 
 ```bash
 #!/bin/bash
@@ -116,15 +110,15 @@ git -C ~/dotfiles commit -m "keybind remap: $*" --quiet
 ## How it works
 
 Hyprland reports Lua-registered binds without a recoverable action, so
-editing binds by rewriting actions is a dead end. Instead, every binding,
-default or personal, passes through `hl.bind` when the config loads. The
-`install.sh` step adds a small hook, loaded before the Omarchy defaults,
-that wraps `hl.bind`/`hl.unbind` and rewrites combos according to
-`~/.config/hypr/keybind-remaps.lua`. A remap moves a binding without
-touching its action; an empty remap removes it.
+editing binds by rewriting actions is a dead end. Instead the plugin uses
+the fact that every binding, default or personal, passes through `hl.bind`
+when the config loads. `install.sh` adds a small hook, loaded before the
+Omarchy defaults, that wraps `hl.bind`/`hl.unbind` and rewrites combos
+according to `~/.config/hypr/keybind-remaps.lua`. A remap moves a binding
+without touching its action. An empty remap removes it.
 
 The overlay lists binds by re-executing the Hyprland Lua config with a
-stubbed API (the same technique the stock menu uses), so the list always
+stubbed API, the same technique the stock menu uses. The list always
 matches what Hyprland registered, remaps included.
 
 ## Files
