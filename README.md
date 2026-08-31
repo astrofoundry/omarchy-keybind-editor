@@ -9,8 +9,7 @@ rebind applies immediately. No config editing, no reload.
 
 ## Features
 
-- Rebinds any binding, including Omarchy defaults, without knowing what it
-  does.
+- Rebinds any binding, including the Omarchy defaults.
 - Conflicts show in orange. Apply anyway and the combo moves off the other
   action.
 - Reset a changed binding to its default: hover its marker and click, or
