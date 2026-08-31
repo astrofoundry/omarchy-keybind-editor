@@ -337,8 +337,8 @@ Item {
       if (KeybindModel.canonicalCombo(root.rows[i].normalized, root.activeSymToCode) === canonical) {
         root.conflictRow = root.rows[i]
         root.conflictText = "Already bound: " + root.rows[i].description
-          + (root.addOpen ? " — press another combination"
-                          : " — Enter overrides and removes it there")
+          + (root.addOpen ? " · press another combination"
+                          : " · Enter overrides and removes it there")
         return
       }
     }
@@ -633,13 +633,44 @@ Item {
 
           Text {
             id: hintText
-            anchors.right: parent.right
+            anchors.right: addButton.left
+            anchors.rightMargin: Style.space(14)
             anchors.verticalCenter: parent.verticalCenter
             text: "Enter to change · Esc to close"
             color: root.foreground
             opacity: 0.4
             font.family: root.fontFamily
             font.pixelSize: Style.font.caption
+          }
+
+          Rectangle {
+            id: addButton
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            width: addLabel.implicitWidth + Style.space(20)
+            height: Math.min(root.headerHeight - Style.space(6), Style.space(28))
+            radius: root.cornerRadius
+            color: addButtonArea.containsMouse ? root.selectedBackground : "transparent"
+            border.color: Util.alpha(root.foreground, 0.4)
+            border.width: 1
+            opacity: addButtonArea.containsMouse ? 1 : 0.7
+
+            Text {
+              id: addLabel
+              anchors.centerIn: parent
+              text: "+ Add custom…"
+              color: addButtonArea.containsMouse ? root.selectedText : root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+
+            MouseArea {
+              id: addButtonArea
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.openAdd()
+            }
           }
         }
 
@@ -654,37 +685,6 @@ Item {
             clip: true
             spacing: Style.space(4)
             boundsBehavior: Flickable.StopAtBounds
-
-            footer: Item {
-              width: resultList.width
-              height: root.rowHeight + Style.space(4)
-
-              Rectangle {
-                anchors.fill: parent
-                anchors.topMargin: Style.space(4)
-                radius: root.cornerRadius
-                color: addRowArea.containsMouse ? root.selectedBackground : "transparent"
-
-                Text {
-                  anchors.verticalCenter: parent.verticalCenter
-                  anchors.left: parent.left
-                  anchors.leftMargin: Style.space(12)
-                  text: "+ Add custom keybinding"
-                  color: addRowArea.containsMouse ? root.selectedText : root.foreground
-                  opacity: addRowArea.containsMouse ? 1 : 0.55
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.body
-                }
-
-                MouseArea {
-                  id: addRowArea
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  cursorShape: Qt.PointingHandCursor
-                  onClicked: root.openAdd()
-                }
-              }
-            }
 
             delegate: Rectangle {
               id: row

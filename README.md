@@ -3,7 +3,8 @@
 An [Omarchy](https://omarchy.org) shell plugin that turns the keybindings
 viewer into an editor. It lists every effective Hyprland binding with a
 **Change** button; press the new combination in a VS Code-style capture
-dialog and the rebind applies immediately — no config editing, no reload.
+dialog and the rebind applies immediately, with no config editing and no
+reload.
 
 - Works on **any** binding, including Omarchy defaults, without knowing what
   the binding does.
@@ -13,6 +14,8 @@ dialog and the rebind applies immediately — no config editing, no reload.
   easy to review, version, or copy to another machine.
 - Capturing a binding's original combo restores the default.
 - The stock read-only menu stays available via `omarchy menu keybindings`.
+
+![Demo: rebinding with conflict override, reset to default, and adding a custom binding](screenshots/demo.gif)
 
 ## Install
 
@@ -42,11 +45,15 @@ config-side hook, its release notes say to re-run `install.sh`.
 
 ## Screenshots
 
-![Keybindings list — every binding gets a Change button; rebound entries are marked "changed"](screenshots/list.png)
+![Keybindings list: every binding gets a Change button; rebound entries are marked "changed"](screenshots/list.png)
 
-![Capture dialog — press the new combination, Enter applies](screenshots/capture.png)
+![Capture dialog: press the new combination, Enter applies](screenshots/capture.png)
 
-![Conflict — the combo is taken; Enter overrides and unbinds it from the other action](screenshots/conflict.png)
+![Conflict: the combo is taken; Enter overrides and unbinds it from the other action](screenshots/conflict.png)
+
+![Reset: hovering a "changed" marker turns it into "reset"; clicking asks for confirmation](screenshots/reset.png)
+
+![Add custom keybinding: combo, description, and command in one dialog](screenshots/add.png)
 
 ## Usage
 
@@ -57,6 +64,13 @@ config-side hook, its release notes say to re-run `install.sh`.
 - An orange warning means the combo is taken; **Enter** overrides and unbinds
   it from the other action.
 - To restore a binding's default, capture its original combination.
+- To restore a binding's default without recapturing it, hover its
+  *changed* marker (it turns into **reset**) and click; a confirmation
+  dialog applies the reset.
+- The **+ Add custom…** button (top right) creates a new binding in three
+  steps: press the combo (taken combos are refused), type a description,
+  type the command. The binding is appended as an `o.bind(...)` line to
+  `~/.config/hypr/bindings.lua`; a failed reload rolls the file back.
 - To restore an overridden (removed) binding, delete its empty-value line in
   `~/.config/hypr/keybind-remaps.lua`.
 
@@ -69,7 +83,7 @@ Three levels, from manual to automatic:
 back and running `hyprctl reload`.
 
 **Version it in a dotfiles repo.** Move the file into your repo and leave a
-symlink behind — the editor writes through the symlink:
+symlink behind; the editor writes through the symlink:
 
 ```bash
 mv ~/.config/hypr/keybind-remaps.lua ~/dotfiles/keybind-remaps.lua
@@ -97,8 +111,8 @@ git -C ~/dotfiles commit -m "keybind remap: $*" --quiet
 ## How it works
 
 Hyprland reports Lua-registered binds without a recoverable action, so
-editing binds by rewriting actions is a dead end. Instead, every binding —
-default or personal — passes through `hl.bind` when the config loads. The
+editing binds by rewriting actions is a dead end. Instead, every binding,
+default or personal, passes through `hl.bind` when the config loads. The
 `install.sh` step adds a small hook, loaded before the Omarchy defaults,
 that wraps `hl.bind`/`hl.unbind` and rewrites combos according to
 `~/.config/hypr/keybind-remaps.lua`. A remap moves a binding without
@@ -116,6 +130,7 @@ matches what Hyprland registered, remaps included.
 | `KeybindModel.js` | Parsing, normalization, ordering, conflict logic |
 | `extract-binds.lua` | Lists effective binds from the Lua config |
 | `apply-remap.sh` | Rewrites the remap table, reloads Hyprland, fires the `keybind-remap` hook |
+| `add-bind.sh` | Appends a custom `o.bind` to `bindings.lua`, validates, rolls back on error |
 | `xkb-symbols.sh` | Keycode/name maps for display and comparison |
 | `hypr/keybind-remap-hook.lua` | The remap layer, installed by `install.sh` |
 

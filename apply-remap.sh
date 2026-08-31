@@ -48,6 +48,14 @@ while (( $# )); do
   esac
 done
 
+# Escape for a double-quoted Lua string. The editor's inputs cannot produce
+# a quote or backslash today; escaping keeps the generated file, which the
+# compositor executes, safe by construction rather than by data flow.
+lua_quote() {
+  local s=${1//\\/\\\\}
+  printf '%s' "${s//\"/\\\"}"
+}
+
 tmp=$(mktemp "${target}.XXXXXX")
 {
   echo '-- Managed by the Astro Keybind Editor plugin (astrofoundry.keybind-editor).'
@@ -56,7 +64,7 @@ tmp=$(mktemp "${target}.XXXXXX")
   echo '-- Applied by ~/.config/hypr/keybind-remap-hook.lua as binds register.'
   echo 'return {'
   while IFS= read -r key; do
-    [[ -n $key ]] && printf '  ["%s"] = "%s",\n' "$key" "${entries[$key]}"
+    [[ -n $key ]] && printf '  ["%s"] = "%s",\n' "$(lua_quote "$key")" "$(lua_quote "${entries[$key]}")"
   done < <(printf '%s\n' "${!entries[@]}" | sort)
   echo '}'
 } >"$tmp"
