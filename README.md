@@ -38,7 +38,7 @@ hl.unbind("SUPER + K") -- Previously: the read-only keybindings menu.
 o.bind("SUPER + K", "Keybindings", "omarchy-shell shell toggle astrofoundry.keybind-editor")
 ```
 
-### Updating
+### Update
 
 ```bash
 omarchy plugin update astrofoundry.keybind-editor --yes
