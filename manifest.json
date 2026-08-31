@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "astrofoundry.keybind-editor",
   "name": "Astro Keybind Editor",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "author": "astrofoundry",
   "license": "MIT",
   "description": "Keybindings viewer with interactive rebinding",
