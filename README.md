@@ -19,6 +19,11 @@ reload.
 
 ## Install
 
+Listed on the [Omarchy plugin marketplace](https://plugins.omarchy.org/plugin.html?id=astrofoundry.keybind-editor)
+(verified, maintainer-reviewed). The marketplace install command is the same
+as below: Omarchy clones this repository, validates it locally, then
+installs and enables the plugin.
+
 ```bash
 omarchy plugin add https://github.com/astrofoundry/omarchy-keybind-editor.git --enable
 bash ~/.config/omarchy/plugins/astrofoundry.keybind-editor/install.sh
