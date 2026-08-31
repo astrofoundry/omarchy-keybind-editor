@@ -5,16 +5,21 @@ viewer into an editor. It lists every effective Hyprland binding with a
 **Change** button. Press the new combination in a capture dialog and the
 rebind applies immediately. No config editing, no reload.
 
+![Demo: rebinding with conflict override, reset to default, and adding a custom binding](screenshots/demo.gif)
+
+## Features
+
 - Rebinds any binding, including Omarchy defaults, without knowing what it
   does.
 - Conflicts show in orange. Apply anyway and the combo moves off the other
   action.
+- Reset a changed binding to its default: hover its marker and click, or
+  capture its original combo.
+- Add custom keybindings: press a combo, type a description and a command.
 - All rebinds live in one file: `~/.config/hypr/keybind-remaps.lua`. Review
-  it, version it, or copy it to another machine.
-- Capture a binding's original combo to restore its default.
+  it, version it, or copy it to another machine. A `keybind-remap` hook
+  fires on every change, for backups or auto-commits.
 - The stock read-only menu stays available: `omarchy menu keybindings`.
-
-![Demo: rebinding with conflict override, reset to default, and adding a custom binding](screenshots/demo.gif)
 
 ## Install
 
