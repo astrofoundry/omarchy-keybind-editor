@@ -2,7 +2,9 @@
 
 Omarchy shell plugin: an overlay that lists all Hyprland keybindings and
 rebinds any of them interactively. See README.md for user-facing docs and
-the architecture summary.
+the architecture summary. For plugin structure, manifest schema, validation,
+and marketplace publishing, see
+[../OMARCHY-PLUGINS-HOWTO.md](../OMARCHY-PLUGINS-HOWTO.md).
 
 ## Layout
 

@@ -245,3 +245,28 @@ function parseRemaps(text) {
   while ((m = re.exec(text)) !== null) out[m[1]] = m[2]
   return out
 }
+
+// Parse the o.bind lines add-bind.sh appended to bindings.lua into
+// { normalizedCombo: { combo, description, command } }. The marker comment
+// is the ownership test: the editor only ever deletes lines it wrote.
+var CUSTOM_BIND_RE = /^\s*o\.bind\("((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"\s*,\s*"((?:[^"\\]|\\.)*)"\)\s*--\s*added by the Astro Keybind Editor\s*$/
+
+function unquoteLua(s) {
+  return s.replace(/\\(.)/g, "$1")
+}
+
+function parseCustomBinds(text) {
+  var out = {}
+  var lines = String(text).split("\n")
+  for (var i = 0; i < lines.length; i++) {
+    var m = CUSTOM_BIND_RE.exec(lines[i])
+    if (!m) continue
+    var combo = unquoteLua(m[1])
+    out[normalize(combo)] = {
+      combo: combo,
+      description: unquoteLua(m[2]),
+      command: unquoteLua(m[3])
+    }
+  }
+  return out
+}

@@ -29,6 +29,7 @@ Item {
   property var activeSymToCode: ({}) // symbol -> keycode, active layout (comparison)
   property var remaps: ({})        // normalized original -> replacement raw combo
   property var remapsInverse: ({}) // normalized replacement -> normalized original
+  property var customBinds: ({})   // normalized combo -> { combo, description, command } from bindings.lua marker lines
 
   // Capture dialog state.
   property bool captureOpen: false
@@ -43,6 +44,7 @@ Item {
   property bool altgrHeld: false
   property string conflictText: ""
   property var conflictRow: null   // row currently holding the captured combo
+  property bool deleteConfirm: false // capture dialog is confirming a delete
   property bool applying: false
   property color warningColor: "#f2994a"
 
@@ -144,6 +146,11 @@ Item {
     return root.remapsInverse[normalized] || normalized
   }
 
+  function loadCustomBinds(text) {
+    root.customBinds = KeybindModel.parseCustomBinds(text || "")
+    if (root.opened) root.rebuildDisplay()
+  }
+
   function rebuildDisplay() {
     var filter = root.filterText.toLowerCase()
     displayModel.clear()
@@ -155,7 +162,8 @@ Item {
         normalized: row.normalized,
         comboPretty: row.comboPretty,
         description: row.description,
-        changed: root.originalFor(row.normalized) !== row.normalized
+        changed: root.originalFor(row.normalized) !== row.normalized,
+        custom: !!root.customBinds[root.originalFor(row.normalized)]
       })
     }
     if (displayModel.count === 0) selectedIndex = 0
@@ -229,6 +237,7 @@ Item {
     root.pendingMods = []
     root.conflictText = ""
     root.conflictRow = null
+    root.deleteConfirm = false
     root.applying = false
     root.captureOpen = true
     root.setBindsSuspended(true)
@@ -237,6 +246,7 @@ Item {
   function closeCapture() {
     if (root.captureOpen) root.setBindsSuspended(false)
     root.captureOpen = false
+    root.deleteConfirm = false
     root.altgrHeld = false
     root.captureRow = null
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
@@ -344,11 +354,51 @@ Item {
     }
   }
 
+  // Clear any captured combo first so the dialog shows the binding about to
+  // be deleted, not a half-entered replacement.
+  function enterDeleteConfirm() {
+    if (!root.captureRow || root.applying) return
+    root.capturedMods = []
+    root.capturedKeyToken = ""
+    root.capturedKeyLabel = ""
+    root.pendingMods = []
+    root.conflictText = ""
+    root.conflictRow = null
+    root.deleteConfirm = true
+  }
+
+  // A custom bind loses its o.bind line (remove-bind.sh); everything else is
+  // disabled through an empty remap, which the hook drops at registration.
+  function applyDelete() {
+    if (!root.captureRow || root.applying) return
+    var original = root.originalFor(root.captureRow.normalized)
+    var custom = root.customBinds[original]
+    root.applying = true
+    if (custom) {
+      var cmd = [root.pluginDir + "/remove-bind.sh",
+                 custom.combo, custom.description, custom.command]
+      if (original !== root.captureRow.normalized) cmd.push(original)
+      applyProc.command = cmd
+    } else {
+      applyProc.command = [root.pluginDir + "/apply-remap.sh", "disable", original]
+    }
+    applyProc.running = true
+  }
+
   function handleCaptureKey(event) {
     event.accepted = true
     if (root.applying) return
 
     var bare = KeybindModel.modTokensFromQt(event.modifiers).length === 0
+
+    // Delete-confirm state: Enter deletes, Esc drops back to capture. Every
+    // other key is swallowed so the captured combo cannot change under the
+    // confirmation text.
+    if (root.deleteConfirm) {
+      if (event.key === Qt.Key_Escape && bare) root.deleteConfirm = false
+      else if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && bare) root.applyDelete()
+      return
+    }
 
     // Bare Escape always cancels — it is never capturable on its own.
     // Modified combos (e.g. Super+Escape) remain bindable.
@@ -370,6 +420,13 @@ Item {
       root.pendingMods = []
       root.conflictText = ""
       root.conflictRow = null
+      return
+    }
+    // Bare Delete asks to delete the binding (reserved like Backspace);
+    // modified combos such as Super+Delete stay capturable. The add dialog
+    // has nothing to delete.
+    if (event.key === Qt.Key_Delete && bare && !root.altgrHeld && !root.addOpen) {
+      root.enterDeleteConfirm()
       return
     }
 
@@ -506,6 +563,16 @@ Item {
     printErrors: false
     onLoaded: root.loadRemaps(text())
     onLoadFailed: root.loadRemaps("")
+    onFileChanged: reload()
+  }
+
+  FileView {
+    id: bindingsFile
+    path: Quickshell.env("HOME") + "/.config/hypr/bindings.lua"
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.loadCustomBinds(text())
+    onLoadFailed: root.loadCustomBinds("")
     onFileChanged: reload()
   }
 
@@ -866,8 +933,12 @@ Item {
 
             Text {
               width: parent.width
-              text: "Press desired key combination and then press ENTER."
-              color: root.foreground
+              text: root.deleteConfirm
+                  ? (root.captureRow && root.captureRow.custom
+                      ? "Delete this custom binding? Its o.bind line is removed from bindings.lua."
+                      : "Remove this binding? Restore it later by deleting its line in keybind-remaps.lua.")
+                  : "Press desired key combination and then press ENTER."
+              color: root.deleteConfirm ? root.warningColor : root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
               horizontalAlignment: Text.AlignHCenter
@@ -879,7 +950,8 @@ Item {
               height: Style.space(38)
               radius: root.cornerRadius
               color: "transparent"
-              border.color: root.conflictRow ? root.warningColor : root.selectedBackground
+              border.color: root.deleteConfirm ? root.warningColor
+                          : (root.conflictRow ? root.warningColor : root.selectedBackground)
               border.width: 2
 
               Text {
@@ -949,8 +1021,29 @@ Item {
             }
 
             Text {
+              anchors.horizontalCenter: parent.horizontalCenter
+              visible: !root.applying
+              text: root.deleteConfirm ? "Confirm delete" : "Delete this binding…"
+              color: root.warningColor
+              opacity: deleteArea.containsMouse ? 1 : 0.7
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+
+              MouseArea {
+                id: deleteArea
+                anchors.fill: parent
+                anchors.margins: -Style.space(4)
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.deleteConfirm ? root.applyDelete() : root.enterDeleteConfirm()
+              }
+            }
+
+            Text {
               width: parent.width
-              text: root.applying ? "Applying…" : "Enter apply · Esc cancel · Backspace clear"
+              text: root.applying ? "Applying…"
+                  : root.deleteConfirm ? "Enter delete · Esc back"
+                  : "Enter apply · Esc cancel · Backspace clear · Del delete"
               color: root.foreground
               opacity: 0.4
               font.family: root.fontFamily

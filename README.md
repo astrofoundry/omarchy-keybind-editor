@@ -14,6 +14,9 @@ rebind applies immediately. No config editing, no reload.
   the other action.
 - Reset a changed binding to its default: hover its marker and click "reset".
 - Add custom keybindings: press a combo, type a description and a command.
+- Delete a binding from its capture dialog: **Del**, then Enter to confirm.
+  A custom binding loses its `o.bind` line; anything else is disabled
+  through the remap file.
 - All rebinds live in one file: `~/.config/hypr/keybind-remaps.lua`. Review
   it, version it, or copy it to another machine. A `keybind-remap` hook
   fires on every change, for backups or auto-commits (see [Backup](#backup)).
@@ -80,7 +83,9 @@ hook, the release notes tell you to re-run `install.sh`.
 - Type to search. Arrows to navigate.
 - **Enter** or the **Change** button opens the capture dialog for a row.
 - In the dialog: press the new combination, then **Enter** to apply.
-  **Backspace** clears. **Esc** cancels.
+  **Backspace** clears. **Esc** cancels. **Del** deletes the binding after
+  an Enter confirmation (bare Del is therefore not capturable as a combo;
+  modified combos like Super+Del still are).
 - Capturing a binding's original combination also restores its default.
 - Custom bindings land as `o.bind(...)` lines in
   `~/.config/hypr/bindings.lua`. A failed reload rolls the file back.
@@ -105,7 +110,9 @@ ln -s ~/dotfiles/keybind-remaps.lua ~/.config/hypr/keybind-remaps.lua
 
 **Run a script on every change.** After each rebind the editor fires the
 `keybind-remap` hook with the applied operations as arguments
-(`set <original> <replacement>`, `delete <original>`, `disable <original>`).
+(`set <original> <replacement>`, `delete <original>`, `disable <original>`,
+`add <combo> <description> <command>`,
+`remove <combo> <description> <command>`).
 Install a script:
 
 ```bash
@@ -143,6 +150,7 @@ matches what Hyprland registered, remaps included.
 | `extract-binds.lua` | Lists effective binds from the Lua config |
 | `apply-remap.sh` | Rewrites the remap table, reloads Hyprland, fires the `keybind-remap` hook |
 | `add-bind.sh` | Appends a custom `o.bind` to `bindings.lua`, validates, rolls back on error |
+| `remove-bind.sh` | Deletes an editor-added `o.bind` line from `bindings.lua`, validates, rolls back on error |
 | `xkb-symbols.sh` | Keycode/name maps for display and comparison |
 | `hypr/keybind-remap-hook.lua` | The remap layer, installed by `install.sh` |
 
