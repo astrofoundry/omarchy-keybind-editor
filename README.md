@@ -50,13 +50,32 @@ hook, the release notes tell you to re-run `install.sh`.
 
 ## Screenshots
 
-![Keybindings list: every binding gets a Change button; rebound entries are marked "changed"](screenshots/list.png)
+<table>
+  <tr>
+    <td align="center">
+      <a href="screenshots/list.png"><img src="screenshots/list.png" width="230" alt="Keybindings list: every binding gets a Change button; rebound entries are marked changed"></a>
+      <br><sub>List</sub>
+    </td>
+    <td align="center">
+      <a href="screenshots/capture.png"><img src="screenshots/capture.png" width="230" alt="Capture dialog: press the new combination, Enter applies"></a>
+      <br><sub>Capture</sub>
+    </td>
+    <td align="center">
+      <a href="screenshots/conflict.png"><img src="screenshots/conflict.png" width="230" alt="Conflict: the combo is taken; Enter overrides and unbinds it from the other action"></a>
+      <br><sub>Conflict</sub>
+    </td>
+    <td align="center">
+      <a href="screenshots/reset.png"><img src="screenshots/reset.png" width="230" alt="Reset: hovering a changed marker turns it into reset; clicking asks for confirmation"></a>
+      <br><sub>Reset</sub>
+    </td>
+    <td align="center">
+      <a href="screenshots/add.png"><img src="screenshots/add.png" width="230" alt="Add custom keybinding: combo, description, and command in one dialog"></a>
+      <br><sub>Add custom</sub>
+    </td>
+  </tr>
+</table>
 
-![Capture dialog: press the new combination, Enter applies](screenshots/capture.png)
-
-![Conflict: the combo is taken; Enter overrides and unbinds it from the other action](screenshots/conflict.png)
-
-![Add custom keybinding: combo, description, and command in one dialog](screenshots/add.png)
+Click a thumbnail for full size.
 
 ## Usage
 
