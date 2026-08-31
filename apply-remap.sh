@@ -7,9 +7,16 @@
 #   delete <normalized-original>                    drop the entry (restore default)
 #   disable <normalized-original>                   remove the bind entirely
 #                                                   (empty value; the hook skips it)
+#
+# After a successful apply, fires `omarchy-hook keybind-remap <op>...` with
+# the ops it was given, for user automation (backup, auto-commit, ...).
 set -euo pipefail
 
 file="$HOME/.config/hypr/keybind-remaps.lua"
+# Resolve symlinks (e.g. into a dotfiles repo) so the rewrite goes through
+# the link instead of replacing it with a regular file.
+target=$(realpath -m "$file")
+ops=("$@")
 
 declare -A entries=()
 if [[ -f $file ]]; then
@@ -41,9 +48,9 @@ while (( $# )); do
   esac
 done
 
-tmp=$(mktemp "${file}.XXXXXX")
+tmp=$(mktemp "${target}.XXXXXX")
 {
-  echo '-- Managed by the keybind editor plugin (astrofoundry.keybind-editor).'
+  echo '-- Managed by the Astro Keybind Editor plugin (astrofoundry.keybind-editor).'
   echo '-- Maps an original key combo (normalized) to its replacement.'
   echo '-- An empty replacement removes the bind entirely (editor override).'
   echo '-- Applied by ~/.config/hypr/keybind-remap-hook.lua as binds register.'
@@ -53,7 +60,7 @@ tmp=$(mktemp "${file}.XXXXXX")
   done < <(printf '%s\n' "${!entries[@]}" | sort)
   echo '}'
 } >"$tmp"
-mv "$tmp" "$file"
+mv "$tmp" "$target"
 
 hyprctl reload >/dev/null
 errors=$(hyprctl configerrors 2>/dev/null || true)
@@ -62,4 +69,9 @@ if [[ -n $errors && ${errors,,} != *"no errors"* ]]; then
   echo "$errors" >&2
   exit 1
 fi
+
+# Detached and silenced: a slow hook must not block the capture dialog or
+# hold the caller's stdout open.
+omarchy-hook keybind-remap "${ops[@]}" >/dev/null 2>&1 &
+
 echo OK

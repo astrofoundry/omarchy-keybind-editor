@@ -60,6 +60,40 @@ config-side hook, its release notes say to re-run `install.sh`.
 - To restore an overridden (removed) binding, delete its empty-value line in
   `~/.config/hypr/keybind-remaps.lua`.
 
+## Backup
+
+All your rebinds live in one file: `~/.config/hypr/keybind-remaps.lua`.
+Three levels, from manual to automatic:
+
+**Copy the file.** Back up by copying it anywhere; restore by copying it
+back and running `hyprctl reload`.
+
+**Version it in a dotfiles repo.** Move the file into your repo and leave a
+symlink behind — the editor writes through the symlink:
+
+```bash
+mv ~/.config/hypr/keybind-remaps.lua ~/dotfiles/keybind-remaps.lua
+ln -s ~/dotfiles/keybind-remaps.lua ~/.config/hypr/keybind-remaps.lua
+```
+
+**Act on every change.** After each successful rebind the editor fires the
+`keybind-remap` hook with the applied operations as arguments
+(`set <original> <replacement>`, `delete <original>`, or
+`disable <original>`). Install any script Omarchy-hook style:
+
+```bash
+omarchy hook install keybind-remap my-script.sh
+```
+
+For example, combined with the symlink above, this auto-commits every
+rebind:
+
+```bash
+#!/bin/bash
+git -C ~/dotfiles add keybind-remaps.lua
+git -C ~/dotfiles commit -m "keybind remap: $*" --quiet
+```
+
 ## How it works
 
 Hyprland reports Lua-registered binds without a recoverable action, so
@@ -81,7 +115,7 @@ matches what Hyprland registered, remaps included.
 | `KeybindEditor.qml` | Overlay UI and capture dialog |
 | `KeybindModel.js` | Parsing, normalization, ordering, conflict logic |
 | `extract-binds.lua` | Lists effective binds from the Lua config |
-| `apply-remap.sh` | Rewrites the remap table, reloads Hyprland |
+| `apply-remap.sh` | Rewrites the remap table, reloads Hyprland, fires the `keybind-remap` hook |
 | `xkb-symbols.sh` | Keycode/name maps for display and comparison |
 | `hypr/keybind-remap-hook.lua` | The remap layer, installed by `install.sh` |
 
