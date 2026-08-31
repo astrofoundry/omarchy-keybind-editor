@@ -35,11 +35,27 @@ function rawCombo(modTokens, keyToken) {
   return modTokens.concat([keyToken]).join(" + ")
 }
 
+// Media keys arrive as raw XF86 keysym names; show them as words. Display
+// only: matching and normalize() still use the raw name.
+var XF86_PRETTY = {
+  AudioRaiseVolume: "Volume Up", AudioLowerVolume: "Volume Down",
+  AudioMute: "Mute", AudioMicMute: "Mic Mute",
+  AudioPlay: "Play", AudioPause: "Pause",
+  AudioNext: "Next Track", AudioPrev: "Previous Track", AudioStop: "Stop",
+  MonBrightnessUp: "Brightness Up", MonBrightnessDown: "Brightness Down",
+  KbdBrightnessUp: "Kbd Brightness Up", KbdBrightnessDown: "Kbd Brightness Down",
+  KbdLightOnOff: "Kbd Light"
+}
+
 function prettyKey(keyToken, xkbMap) {
   if (keyToken.toLowerCase().indexOf("code:") === 0) {
     var code = keyToken.slice(5)
     var symbol = xkbMap[code]
     if (symbol) return symbol
+  }
+  if (keyToken.indexOf("XF86") === 0) {
+    var name = keyToken.slice(4)
+    return XF86_PRETTY[name] || name.replace(/([a-z0-9])([A-Z])/g, "$1 $2")
   }
   return keyToken
 }

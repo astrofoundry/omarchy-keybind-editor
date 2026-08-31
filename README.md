@@ -10,14 +10,13 @@ rebind applies immediately. No config editing, no reload.
 ## Features
 
 - Rebinds any binding, including the Omarchy defaults.
-- Conflicts show in orange. Apply anyway and the combo moves off the other
-  action.
-- Reset a changed binding to its default: hover its marker and click, or
-  capture its original combo.
+- Conflicts show in orange. If you apply anyway, the combo is removed from
+  the other action.
+- Reset a changed binding to its default: hover its marker and click "reset".
 - Add custom keybindings: press a combo, type a description and a command.
 - All rebinds live in one file: `~/.config/hypr/keybind-remaps.lua`. Review
   it, version it, or copy it to another machine. A `keybind-remap` hook
-  fires on every change, for backups or auto-commits.
+  fires on every change, for backups or auto-commits (see *Backup*).
 - The stock read-only menu stays available: `omarchy menu keybindings`.
 
 ## Install
@@ -56,25 +55,17 @@ hook, the release notes tell you to re-run `install.sh`.
 
 ![Conflict: the combo is taken; Enter overrides and unbinds it from the other action](screenshots/conflict.png)
 
-![Reset: hovering a "changed" marker turns it into "reset"; clicking asks for confirmation](screenshots/reset.png)
-
 ![Add custom keybinding: combo, description, and command in one dialog](screenshots/add.png)
 
 ## Usage
 
 - Type to search. Arrows to navigate.
 - **Enter** or the **Change** button opens the capture dialog for a row.
-- Press the new combination, then **Enter** to apply. **Backspace** clears.
-  **Esc** cancels.
-- An orange warning means the combo is taken. **Enter** applies anyway and
-  unbinds it from the other action.
-- To restore a default, capture the binding's original combination.
-- Faster: hover the *changed* marker until it reads **reset**, click, and
-  confirm.
-- The **+ Add custom…** button (top right) creates a new binding: press the
-  combo (taken combos are refused), type a description, type the command.
-  It lands as an `o.bind(...)` line in `~/.config/hypr/bindings.lua`. A
-  failed reload rolls the file back.
+- In the dialog: press the new combination, then **Enter** to apply.
+  **Backspace** clears. **Esc** cancels.
+- Capturing a binding's original combination also restores its default.
+- Custom bindings land as `o.bind(...)` lines in
+  `~/.config/hypr/bindings.lua`. A failed reload rolls the file back.
 - To restore an overridden (removed) binding, delete its empty-value line in
   `~/.config/hypr/keybind-remaps.lua`.
 
