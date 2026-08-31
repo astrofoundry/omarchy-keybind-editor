@@ -16,7 +16,7 @@ rebind applies immediately. No config editing, no reload.
 - Add custom keybindings: press a combo, type a description and a command.
 - All rebinds live in one file: `~/.config/hypr/keybind-remaps.lua`. Review
   it, version it, or copy it to another machine. A `keybind-remap` hook
-  fires on every change, for backups or auto-commits (see *Backup*).
+  fires on every change, for backups or auto-commits (see [Backup](#backup)).
 - The stock read-only menu stays available: `omarchy menu keybindings`.
 
 ## Install
@@ -26,7 +26,8 @@ omarchy plugin add https://github.com/astrofoundry/omarchy-keybind-editor.git --
 bash ~/.config/omarchy/plugins/astrofoundry.keybind-editor/install.sh
 ```
 
-The second command installs the config-side hook (see *How it works*). It is
+The second command installs the config-side hook (see
+[How it works](#how-it-works)). It is
 safe to run again. Also on the
 [Omarchy plugin marketplace](https://plugins.omarchy.org/plugin.html?id=astrofoundry.keybind-editor).
 
