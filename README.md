@@ -5,7 +5,7 @@ keybindings viewer into an editor. It lists every effective Hyprland binding wit
 **Change** button. Press the new combination in a capture dialog and the
 rebind applies immediately. No config editing, no reload.
 
-![Demo: rebinding with conflict override, reset to default, and adding a custom binding](screenshots/demo.gif)
+![Demo: search, the capture dialog, renaming a default, deleting it to the Removed section, and restoring it](screenshots/demo.gif)
 
 ## Features
 
