@@ -49,11 +49,15 @@ o.bind("SUPER + K", "Keybindings", "omarchy-shell shell toggle astrofoundry.keyb
 
 ```bash
 omarchy plugin update astrofoundry.keybind-editor --yes
+# Optional: only needed when the release notes say the config-side hook
+# changed. Safe to run every time, so run it when in doubt.
+bash ~/.config/omarchy/plugins/astrofoundry.keybind-editor/install.sh
 ```
 
-Without `--yes` the command shows the incoming changes in a pager (`q` to
-close) and asks for confirmation. When a release changes the config-side
-hook, the release notes tell you to re-run `install.sh`.
+Without `--yes` the first command shows the incoming changes in a pager
+(`q` to close) and asks for confirmation. The second one refreshes the hook
+in `~/.config/hypr/`; it is idempotent and leaves your remaps and renames
+untouched.
 
 ## Screenshots
 
