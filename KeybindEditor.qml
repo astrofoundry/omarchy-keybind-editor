@@ -140,8 +140,13 @@ Item {
     root.rebuildDisplay()
   }
 
+  // Keys are normalized on load so a hand-edited "Super + K" still matches.
   function loadRenames(text) {
-    root.renames = KeybindModel.parseRemaps(text || "")
+    var parsed = KeybindModel.parseRemaps(text || "")
+    var normalized = {}
+    for (var original in parsed)
+      normalized[KeybindModel.normalize(original)] = parsed[original]
+    root.renames = normalized
     if (root.opened) root.rebuildDisplay()
   }
 
@@ -283,7 +288,9 @@ Item {
       || event.nativeScanCode === 108
   }
 
-  function openCapture(index) {
+  // skipSuspend: the caller goes straight into rename, which needs binds
+  // live; avoids dispatching suspend and reset back to back.
+  function openCapture(index, skipSuspend) {
     if (index < 0 || index >= displayModel.count) return
     root.altgrHeld = false
     root.captureRow = displayModel.get(index)
@@ -297,7 +304,7 @@ Item {
     root.renameMode = false
     root.applying = false
     root.captureOpen = true
-    root.setBindsSuspended(true)
+    if (!skipSuspend) root.setBindsSuspended(true)
   }
 
   function closeCapture() {
@@ -318,7 +325,7 @@ Item {
   }
 
   function openRename(index) {
-    root.openCapture(index)
+    root.openCapture(index, true)
     if (root.captureOpen) root.enterRename()
   }
 
@@ -397,12 +404,14 @@ Item {
   }
 
   // Every kind is one apply-remap.sh op on the original combo: "combo" and
-  // "restore" delete the remap entry (a removed bind's row already carries
-  // its original combo), "name" drops the rename entry.
+  // "restore" delete the remap entry, "name" drops the rename entry. A
+  // removed row already carries its original combo; do not run it through
+  // the remap inverse, another action's replacement may sit on that combo.
   function applyReset() {
     if (!root.resetRow || root.applying) return
     root.applying = true
-    var original = root.originalFor(root.resetRow.normalized)
+    var original = root.resetKind === "restore" ? root.resetRow.normalized
+                                                : root.originalFor(root.resetRow.normalized)
     applyProc.command = [root.pluginDir + "/apply-remap.sh",
                          root.resetKind === "name" ? "unrename" : "delete", original]
     applyProc.running = true
@@ -478,7 +487,7 @@ Item {
     root.deleteConfirm = false
     root.renameMode = true
     renameInput.text = root.captureRow.description
-    root.setBindsSuspended(false)
+    if (root.bindsSuspended) root.setBindsSuspended(false)
     Qt.callLater(function() { renameInput.forceActiveFocus(); renameInput.selectAll() })
   }
 

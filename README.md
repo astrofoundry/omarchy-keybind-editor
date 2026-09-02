@@ -60,11 +60,11 @@ hook, the release notes tell you to re-run `install.sh`.
 <table>
   <tr>
     <td align="center">
-      <a href="screenshots/list.png"><img src="screenshots/list.png" width="230" alt="Keybindings list: every binding gets a Change button; rebound entries are marked changed"></a>
+      <a href="screenshots/list.png"><img src="screenshots/list.png" width="230" alt="Keybindings list: every binding gets a delete button and a Change button; rebound entries are marked changed"></a>
       <br><sub>List</sub>
     </td>
     <td align="center">
-      <a href="screenshots/capture.png"><img src="screenshots/capture.png" width="230" alt="Capture dialog: press the new combination, Enter applies"></a>
+      <a href="screenshots/capture.png"><img src="screenshots/capture.png" width="230" alt="Capture dialog: press the new combination, Enter applies; Rename and Delete links below"></a>
       <br><sub>Capture</sub>
     </td>
     <td align="center">
@@ -78,6 +78,16 @@ hook, the release notes tell you to re-run `install.sh`.
     <td align="center">
       <a href="screenshots/add.png"><img src="screenshots/add.png" width="230" alt="Add custom keybinding: combo, description, and command in one dialog"></a>
       <br><sub>Add custom</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="screenshots/rename.png"><img src="screenshots/rename.png" width="230" alt="Rename: F2 or the Rename link turns the capture dialog into a name field, prefilled with the current name"></a>
+      <br><sub>Rename</sub>
+    </td>
+    <td align="center">
+      <a href="screenshots/removed.png"><img src="screenshots/removed.png" width="230" alt="Removed section: deleted defaults are listed struck through with a Restore button; Enter asks for confirmation"></a>
+      <br><sub>Removed and restore</sub>
     </td>
   </tr>
 </table>
