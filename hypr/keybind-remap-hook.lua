@@ -2,9 +2,16 @@
 -- Loaded from hyprland.lua BEFORE the Omarchy defaults, it wraps hl.bind and
 -- hl.unbind so any bind — default or personal — can be moved to another key
 -- by combo alone, without knowing its action. The combo table lives in
--- hypr/keybind-remaps.lua, written by the plugin.
+-- hypr/keybind-remaps.lua, written by the plugin. A second table,
+-- hypr/keybind-renames.lua, replaces a bind's description the same way.
 --
 -- normalize() must stay in sync with the plugin's KeybindModel.js.
+--
+-- Two optional globals let the plugin's extract-binds.lua see through the
+-- layer when it replays the config with a stubbed hl; Hyprland never
+-- defines them:
+--   _G.__keybind_editor_on_removed(keys, opts)  called for a dropped bind
+--   _G.__keybind_editor_original_description    set around a renamed bind
 
 local MOD_ALIAS = {
   WIN = "SUPER", META = "SUPER", MOD4 = "SUPER", LOGO = "SUPER",
@@ -55,6 +62,17 @@ for original, replacement in pairs(remaps) do
 end
 _G.__keybind_editor_remaps = normalized
 
+local ok_renames, renames = pcall(require, "hypr.keybind-renames")
+if not ok_renames or type(renames) ~= "table" then
+  renames = {}
+end
+
+local normalized_renames = {}
+for original, description in pairs(renames) do
+  normalized_renames[normalize(original)] = description
+end
+_G.__keybind_editor_renames = normalized_renames
+
 -- Wrap only once per Lua state; the wrappers read the refreshed global.
 local already_hooked = false
 pcall(function()
@@ -67,19 +85,41 @@ if not already_hooked and not _G.__keybind_editor_hooked then
   end
 
   -- An empty replacement means the bind was overridden away in the editor:
-  -- drop the registration entirely instead of remapping it.
+  -- drop the registration entirely instead of remapping it. A rename swaps
+  -- the description on a copy of opts, keyed by the ORIGINAL combo like the
+  -- remap, so renaming survives a later rebind of the same action.
   local original_bind = hl.bind
   hl.bind = function(keys, dispatcher, opts)
-    if type(keys) == "string" then
-      local target = _G.__keybind_editor_remaps[normalize(keys)]
-      if target == "" then
-        return
+    if type(keys) ~= "string" then
+      return original_bind(keys, dispatcher, opts)
+    end
+    local key = normalize(keys)
+    local target = _G.__keybind_editor_remaps[key]
+    if target == "" then
+      local on_removed = _G.__keybind_editor_on_removed
+      if type(on_removed) == "function" then
+        on_removed(keys, opts)
       end
-      if target then
-        keys = target
+      return
+    end
+    if target then
+      keys = target
+    end
+    local renamed = _G.__keybind_editor_renames[key]
+    if renamed == nil then
+      return original_bind(keys, dispatcher, opts)
+    end
+    local copy = {}
+    if type(opts) == "table" then
+      for k, v in pairs(opts) do
+        copy[k] = v
       end
     end
-    return original_bind(keys, dispatcher, opts)
+    _G.__keybind_editor_original_description = copy.description or ""
+    copy.description = renamed
+    local result = original_bind(keys, dispatcher, copy)
+    _G.__keybind_editor_original_description = nil
+    return result
   end
 
   local original_unbind = hl.unbind

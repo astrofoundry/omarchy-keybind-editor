@@ -5,8 +5,14 @@
 -- registers.
 --
 -- Output TSV, in registration order:
---   BIND<TAB>combo<TAB>description
+--   BIND<TAB>combo<TAB>description[<TAB>original description]
 --   UNBIND<TAB>combo
+--   REMOVED<TAB>combo<TAB>description
+--
+-- The fourth BIND column is present when the remap hook renamed the bind
+-- (the stock description, used to keep the row at its stock position).
+-- REMOVED lines are binds the hook dropped because the editor removed them;
+-- the hook reports them through _G.__keybind_editor_on_removed.
 
 local stub
 stub = setmetatable({}, {
@@ -22,19 +28,44 @@ stub = setmetatable({}, {
 
 hl = setmetatable({}, { __index = function() return stub end })
 
-hl.bind = function(keys, dispatcher, opts)
+local function clean(text)
+  return (tostring(text):gsub("[\t\n]", " "))
+end
+
+-- Description of a bind, or nil for submap-scoped binds (like the editor's
+-- own capture submap), which are not part of the global keymap.
+local function description_of(opts)
   local description = ""
   if type(opts) == "table" then
-    -- Submap-scoped binds (like the editor's own capture submap) are not
-    -- part of the global keymap; don't list them.
     if opts.submap ~= nil and opts.submap ~= "" then
-      return
+      return nil
     end
     if type(opts.description) == "string" then
       description = opts.description
     end
   end
-  io.write("BIND\t", tostring(keys), "\t", (description:gsub("[\t\n]", " ")), "\n")
+  return description
+end
+
+hl.bind = function(keys, dispatcher, opts)
+  local description = description_of(opts)
+  if description == nil then
+    return
+  end
+  local original = _G.__keybind_editor_original_description
+  if type(original) == "string" then
+    io.write("BIND\t", tostring(keys), "\t", clean(description), "\t", clean(original), "\n")
+  else
+    io.write("BIND\t", tostring(keys), "\t", clean(description), "\n")
+  end
+end
+
+_G.__keybind_editor_on_removed = function(keys, opts)
+  local description = description_of(opts)
+  if description == nil then
+    return
+  end
+  io.write("REMOVED\t", tostring(keys), "\t", clean(description), "\n")
 end
 
 hl.unbind = function(keys)

@@ -132,14 +132,16 @@ function stockLine(combo, keyPretty, description) {
 // Rows from extract-binds.lua TSV, in registration order. UNBIND lines remove
 // earlier matching combos. Deduplicated by normalized combo (press and
 // release variants of the same combo move together, so they share a row).
-// Sorted by the stock menu's priorities.
+// Sorted by the stock menu's priorities; a renamed bind sorts by its stock
+// description (the optional fourth column) so renaming never moves a row.
 function buildRows(tsv, xkbMap) {
   var sequence = []
   var lines = String(tsv).split("\n")
   for (var i = 0; i < lines.length; i++) {
     var parts = lines[i].split("\t")
     if (parts[0] === "BIND" && parts[1]) {
-      sequence.push({ combo: parts[1], normalized: normalize(parts[1]), description: parts[2] || "" })
+      sequence.push({ combo: parts[1], normalized: normalize(parts[1]), description: parts[2] || "",
+                      sortDescription: parts.length > 3 ? parts[3] : (parts[2] || "") })
     } else if (parts[0] === "UNBIND" && parts[1]) {
       var normalized = normalize(parts[1])
       sequence = sequence.filter(function(entry) { return entry.normalized !== normalized })
@@ -156,13 +158,16 @@ function buildRows(tsv, xkbMap) {
       var row = byCombo[bind.normalized]
       if (bind.description && row.description.indexOf(bind.description) === -1)
         row.description += " / " + bind.description
+      if (bind.sortDescription && row.sortDescription.indexOf(bind.sortDescription) === -1)
+        row.sortDescription += " / " + bind.sortDescription
       continue
     }
     var entry = {
       normalized: bind.normalized,
       combo: bind.combo,
       comboPretty: prettyCombo(bind.combo, xkbMap),
-      description: bind.description
+      description: bind.description,
+      sortDescription: bind.sortDescription
     }
     byCombo[bind.normalized] = entry
     order.push(entry)
@@ -170,7 +175,7 @@ function buildRows(tsv, xkbMap) {
 
   for (var k = 0; k < order.length; k++) {
     var item = order[k]
-    var line = stockLine(item.combo, prettyKey(String(item.combo).split("+").pop().trim(), xkbMap), item.description)
+    var line = stockLine(item.combo, prettyKey(String(item.combo).split("+").pop().trim(), xkbMap), item.sortDescription)
     item.sortLine = line
     item.priority = priorityFor(line)
   }
@@ -179,6 +184,34 @@ function buildRows(tsv, xkbMap) {
     return a.sortLine < b.sortLine ? -1 : (a.sortLine > b.sortLine ? 1 : 0)
   })
   return order
+}
+
+// Binds the remap hook dropped because the editor removed them (REMOVED
+// lines), deduplicated by normalized combo, in registration order. Their
+// combo is the ORIGINAL one: that is what a restore brings back.
+function buildRemoved(tsv, xkbMap) {
+  var out = []
+  var seen = {}
+  var lines = String(tsv).split("\n")
+  for (var i = 0; i < lines.length; i++) {
+    var parts = lines[i].split("\t")
+    if (parts[0] !== "REMOVED" || !parts[1]) continue
+    var normalized = normalize(parts[1])
+    if (seen[normalized]) {
+      if (parts[2] && seen[normalized].description.indexOf(parts[2]) === -1)
+        seen[normalized].description += " / " + parts[2]
+      continue
+    }
+    var entry = {
+      normalized: normalized,
+      combo: parts[1],
+      comboPretty: prettyCombo(parts[1], xkbMap),
+      description: parts[2] || ""
+    }
+    seen[normalized] = entry
+    out.push(entry)
+  }
+  return out
 }
 
 // Qt key names for non-printable keys shown as capture chips.

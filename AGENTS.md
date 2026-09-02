@@ -24,6 +24,9 @@ root ships to users. `hypr/keybind-remap-hook.lua` is not loaded from here —
 - `normalize()` exists twice — `KeybindModel.js` and
   `hypr/keybind-remap-hook.lua` — and the two MUST stay identical in
   behavior. Change them together.
+- `extract-binds.lua` talks to the hook through two optional globals
+  (`_G.__keybind_editor_on_removed`, `_G.__keybind_editor_original_description`).
+  Rename or reshape them in both files together; Hyprland never defines them.
 - A change to `hypr/keybind-remap-hook.lua` does NOT reach users through
   `plugin update`; they must re-run `install.sh`. Say so in the release
   notes. `release.sh` warns when this applies.

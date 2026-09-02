@@ -5,16 +5,24 @@
 # and the reload repeated.
 #
 # Usage: update-bind.sh <old-combo> <new-combo> [<apply-remap-op>...]
+#        update-bind.sh --description <combo> <new-description>
 #
 # The line is matched by its exact combo plus the editor marker comment, so
 # only lines add-bind.sh wrote can be updated. Any extra arguments are passed
 # to apply-remap.sh after a successful rewrite: the editor uses this to purge
 # a legacy remap entry (delete <n>) and to disable a conflicting bind
-# (disable <n>) in the same apply.
+# (disable <n>) in the same apply. The --description form rewrites the
+# line's description instead of its combo (a custom bind is renamed in
+# place; it never enters keybind-renames.lua).
 set -euo pipefail
 
-old_combo=${1:?update-bind: old combo required}
-new_combo=${2:?update-bind: new combo required}
+mode=combo
+if [[ ${1:-} == --description ]]; then
+  mode=description
+  shift
+fi
+old_combo=${1:?update-bind: combo required}
+new_value=${2:?update-bind: new ${mode} required}
 shift 2
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,17 +35,43 @@ target=$(realpath -m "$file")
 backup=$(mktemp "${target}.bak.XXXXXX")
 cp "$target" "$backup"
 
-# Splice the new combo into every editor-marker line carrying the old one.
-# index/substr instead of sub(): combos contain regex metacharacters (+).
+# Escape for a double-quoted Lua string, like add-bind.sh does.
+lua_quote() {
+  local s=${1//\\/\\\\}
+  printf '%s' "${s//\"/\\\"}"
+}
+
+# Splice the new combo (or description) into every editor-marker line
+# carrying the old combo. index/substr instead of sub(): combos contain
+# regex metacharacters (+). The description is the second quoted string;
+# scan it by hand so escaped quotes inside it are skipped.
 tmp=$(mktemp "${target}.XXXXXX")
-if ! gawk -v old="$old_combo" -v new="$new_combo" '
-  BEGIN { prefix = "o.bind(\"" old "\"," }
+# The new value travels through the environment: gawk -v would interpret
+# the backslash escapes lua_quote just added.
+if ! NEW_VALUE="$(lua_quote "$new_value")" gawk -v old="$old_combo" -v mode="$mode" '
+  BEGIN { prefix = "o.bind(\"" old "\","; new = ENVIRON["NEW_VALUE"] }
   {
     s = $0; sub(/^[[:space:]]+/, "", s)
     if (index(s, prefix) == 1 && s ~ /-- added by the Astro Keybind Editor[[:space:]]*$/) {
       at = index($0, prefix)
-      $0 = substr($0, 1, at - 1) "o.bind(\"" new "\"," substr($0, at + length(prefix))
-      found++
+      if (mode == "combo") {
+        $0 = substr($0, 1, at - 1) "o.bind(\"" new "\"," substr($0, at + length(prefix))
+        found++
+      } else {
+        i = at + length(prefix)
+        while (substr($0, i, 1) == " ") i++
+        if (substr($0, i, 1) == "\"") {
+          j = i + 1
+          while (j <= length($0)) {
+            c = substr($0, j, 1)
+            if (c == "\\") { j += 2; continue }
+            if (c == "\"") break
+            j++
+          }
+          $0 = substr($0, 1, i) new substr($0, j)
+          found++
+        }
+      }
     }
     print
   }
@@ -65,6 +99,10 @@ if (( $# )); then
 fi
 
 # Detached and silenced, like the other scripts: never block the dialog.
-omarchy-hook keybind-remap update "$old_combo" "$new_combo" >/dev/null 2>&1 &
+if [[ $mode == combo ]]; then
+  omarchy-hook keybind-remap update "$old_combo" "$new_value" >/dev/null 2>&1 &
+else
+  omarchy-hook keybind-remap rename "$old_combo" "$new_value" >/dev/null 2>&1 &
+fi
 
 echo OK

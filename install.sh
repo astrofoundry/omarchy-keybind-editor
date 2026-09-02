@@ -8,7 +8,8 @@
 #
 # What it does:
 #   1. Copies hypr/keybind-remap-hook.lua to ~/.config/hypr/.
-#   2. Creates ~/.config/hypr/keybind-remaps.lua if missing (the remap table).
+#   2. Creates ~/.config/hypr/keybind-remaps.lua (the remap table) and
+#      ~/.config/hypr/keybind-renames.lua (the rename table) if missing.
 #   3. Adds require("hypr.keybind-remap-hook") to hyprland.lua, right before
 #      require("default.hypr.omarchy").
 #   4. Reloads Hyprland.
@@ -28,6 +29,16 @@ if [[ ! -f $hypr_dir/keybind-remaps.lua ]]; then
 -- Managed by the Astro Keybind Editor plugin (astrofoundry.keybind-editor).
 -- Maps an original key combo (normalized) to its replacement.
 -- An empty replacement removes the bind entirely (editor override).
+-- Applied by ~/.config/hypr/keybind-remap-hook.lua as binds register.
+return {
+}
+EOF
+fi
+
+if [[ ! -f $hypr_dir/keybind-renames.lua ]]; then
+  cat >"$hypr_dir/keybind-renames.lua" <<'EOF'
+-- Managed by the Astro Keybind Editor plugin (astrofoundry.keybind-editor).
+-- Maps an original key combo (normalized) to a replacement description.
 -- Applied by ~/.config/hypr/keybind-remap-hook.lua as binds register.
 return {
 }

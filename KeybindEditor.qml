@@ -25,11 +25,14 @@ Item {
   property bool cursorActive: false
 
   property var rows: []
+  property var removedRows: []     // binds the hook dropped (editor removed); combo is the original
   property var xkbMap: ({})        // keycode -> symbol, default layout (display)
   property var activeSymToCode: ({}) // symbol -> keycode, active layout (comparison)
   property var remaps: ({})        // normalized original -> replacement raw combo
   property var remapsInverse: ({}) // normalized replacement -> normalized original
+  property var renames: ({})       // normalized original -> replacement description (defaults only)
   property var customBinds: ({})   // normalized combo -> { combo, description, command } from bindings.lua marker lines
+  property bool bindsSuspended: false // Hyprland parked in the capture submap
 
   // Capture dialog state.
   property bool captureOpen: false
@@ -45,12 +48,16 @@ Item {
   property string conflictText: ""
   property var conflictRow: null   // row currently holding the captured combo
   property bool deleteConfirm: false // capture dialog is confirming a delete
+  property bool renameMode: false    // capture dialog is editing the description
   property bool applying: false
   property color warningColor: "#f2994a"
 
-  // Reset confirmation dialog state.
+  // Reset confirmation dialog state. Kind "combo" resets a changed row to
+  // its default combo, "name" drops a rename, "restore" brings a removed
+  // bind back.
   property bool resetOpen: false
-  property var resetRow: null      // changed row being reset to its default
+  property var resetRow: null
+  property string resetKind: "combo"
 
   // Add-custom-bind dialog state. Stage 0 captures the combo (binds
   // suspended, like the capture dialog); stages 1 and 2 are plain text
@@ -90,9 +97,9 @@ Item {
   }
 
   function close() {
-    if (root.captureOpen || (root.addOpen && root.addStage === 0))
-      root.setBindsSuspended(false)
+    if (root.bindsSuspended) root.setBindsSuspended(false)
     root.captureOpen = false
+    root.renameMode = false
     root.resetOpen = false
     root.resetRow = null
     root.addOpen = false
@@ -129,7 +136,13 @@ Item {
 
   function loadBinds(tsv) {
     root.rows = KeybindModel.buildRows(tsv, root.xkbMap)
+    root.removedRows = KeybindModel.buildRemoved(tsv, root.xkbMap)
     root.rebuildDisplay()
+  }
+
+  function loadRenames(text) {
+    root.renames = KeybindModel.parseRemaps(text || "")
+    if (root.opened) root.rebuildDisplay()
   }
 
   function loadRemaps(text) {
@@ -151,28 +164,57 @@ Item {
     if (root.opened) root.rebuildDisplay()
   }
 
+  function matchesFilter(filter, row) {
+    return !filter || row.description.toLowerCase().indexOf(filter) !== -1
+      || row.comboPretty.toLowerCase().indexOf(filter) !== -1
+  }
+
+  // Every append carries the full role set: a ListModel fixes its roles on
+  // the first row, and the header and removed rows share the delegate.
   function rebuildDisplay() {
     var filter = root.filterText.toLowerCase()
     displayModel.clear()
     for (var i = 0; i < root.rows.length; i++) {
       var row = root.rows[i]
-      if (filter && row.description.toLowerCase().indexOf(filter) === -1
-          && row.comboPretty.toLowerCase().indexOf(filter) === -1) continue
+      if (!root.matchesFilter(filter, row)) continue
       var original = root.originalFor(row.normalized)
       var isCustom = !!root.customBinds[original]
       displayModel.append({
+        kind: "bind",
         normalized: row.normalized,
         comboPretty: row.comboPretty,
         description: row.description,
+        stockDescription: row.sortDescription,
         // A custom bind is updated in place, so it has no default to mark a
-        // change against; a legacy remap entry may still redirect it.
+        // change against; a legacy remap entry may still redirect it. Same
+        // for its name: a custom rename rewrites the o.bind line.
         changed: original !== row.normalized && !isCustom,
+        renamed: !isCustom && (original in root.renames),
         custom: isCustom
       })
+    }
+    var removed = root.removedRows.filter(function(row) { return root.matchesFilter(filter, row) })
+    if (removed.length > 0) {
+      displayModel.append({
+        kind: "header", normalized: "", comboPretty: "", description: "Removed",
+        stockDescription: "", changed: false, renamed: false, custom: false
+      })
+      for (var j = 0; j < removed.length; j++) {
+        displayModel.append({
+          kind: "removed",
+          normalized: removed[j].normalized,
+          comboPretty: removed[j].comboPretty,
+          description: removed[j].description,
+          stockDescription: removed[j].description,
+          changed: false, renamed: false, custom: false
+        })
+      }
     }
     if (displayModel.count === 0) selectedIndex = 0
     else if (selectedIndex >= displayModel.count) selectedIndex = displayModel.count - 1
     else if (selectedIndex < 0) selectedIndex = 0
+    // Only removed rows match: the header sits at the top; skip it.
+    if (displayModel.count > 1 && displayModel.get(selectedIndex).kind === "header") selectedIndex++
     Qt.callLater(function() {
       if (displayModel.count > 0) resultList.positionViewAtIndex(root.selectedIndex, ListView.Contain)
     })
@@ -187,7 +229,16 @@ Item {
     } else {
       selectedIndex = (selectedIndex + delta + displayModel.count) % displayModel.count
     }
+    // The section header is not selectable; step over it in the direction
+    // of travel (it never sits at either end of the list).
+    if (displayModel.get(selectedIndex).kind === "header")
+      selectedIndex = (selectedIndex + (delta < 0 ? -1 : 1) + displayModel.count) % displayModel.count
     resultList.positionViewAtIndex(selectedIndex, ListView.Contain)
+  }
+
+  function selectedKind() {
+    if (!root.cursorActive || root.selectedIndex < 0 || root.selectedIndex >= displayModel.count) return ""
+    return displayModel.get(root.selectedIndex).kind
   }
 
   function setFilter(nextFilter) {
@@ -223,6 +274,7 @@ Item {
 
   function setBindsSuspended(suspended) {
     var name = suspended ? "keybind-capture" : "reset"
+    root.bindsSuspended = suspended
     root.dispatchCompat('hl.dsp.submap("' + name + '")', "submap " + name)
   }
 
@@ -242,18 +294,32 @@ Item {
     root.conflictText = ""
     root.conflictRow = null
     root.deleteConfirm = false
+    root.renameMode = false
     root.applying = false
     root.captureOpen = true
     root.setBindsSuspended(true)
   }
 
   function closeCapture() {
-    if (root.captureOpen) root.setBindsSuspended(false)
+    if (root.bindsSuspended) root.setBindsSuspended(false)
     root.captureOpen = false
     root.deleteConfirm = false
+    root.renameMode = false
     root.altgrHeld = false
     root.captureRow = null
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+  }
+
+  // Shortcuts from the list: open the dialog straight into delete
+  // confirmation or rename, skipping the capture step.
+  function openDelete(index) {
+    root.openCapture(index)
+    if (root.captureOpen) root.enterDeleteConfirm()
+  }
+
+  function openRename(index) {
+    root.openCapture(index)
+    if (root.captureOpen) root.enterRename()
   }
 
   function openAdd() {
@@ -274,7 +340,7 @@ Item {
   }
 
   function closeAdd() {
-    if (root.addOpen && root.addStage === 0) root.setBindsSuspended(false)
+    if (root.bindsSuspended) root.setBindsSuspended(false)
     root.addOpen = false
     root.addStage = 0
     root.altgrHeld = false
@@ -303,11 +369,24 @@ Item {
   }
 
   // No submap suspension here: the dialog only confirms, it captures no keys.
-  function openReset(index) {
+  function openReset(index, kind) {
     if (index < 0 || index >= displayModel.count) return
     root.resetRow = displayModel.get(index)
+    root.resetKind = kind || "combo"
     root.conflictText = ""
     root.applying = false
+    // A restored bind lands on its original combo; warn when a live bind
+    // holds it, since both would then fire.
+    if (root.resetKind === "restore") {
+      var canonical = KeybindModel.canonicalCombo(root.resetRow.normalized, root.activeSymToCode)
+      for (var i = 0; i < root.rows.length; i++) {
+        if (KeybindModel.canonicalCombo(root.rows[i].normalized, root.activeSymToCode) === canonical) {
+          root.conflictText = "Already bound: " + root.rows[i].description
+            + " · both would fire on this combination"
+          break
+        }
+      }
+    }
     root.resetOpen = true
   }
 
@@ -317,12 +396,27 @@ Item {
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
+  // Every kind is one apply-remap.sh op on the original combo: "combo" and
+  // "restore" delete the remap entry (a removed bind's row already carries
+  // its original combo), "name" drops the rename entry.
   function applyReset() {
     if (!root.resetRow || root.applying) return
     root.applying = true
+    var original = root.originalFor(root.resetRow.normalized)
     applyProc.command = [root.pluginDir + "/apply-remap.sh",
-                         "delete", root.originalFor(root.resetRow.normalized)]
+                         root.resetKind === "name" ? "unrename" : "delete", original]
     applyProc.running = true
+  }
+
+  function resetPrompt() {
+    if (!root.resetRow) return ""
+    var row = root.resetRow
+    if (root.resetKind === "name")
+      return "Reset the name of " + row.comboPretty + " to “" + row.stockDescription + "”?"
+    if (root.resetKind === "restore")
+      return "Restore " + row.comboPretty + " (" + row.description + ")?"
+    return "Reset " + row.comboPretty + " to its default "
+      + KeybindModel.prettyCombo(root.originalFor(row.normalized), root.xkbMap) + "?"
   }
 
   function capturedRaw() {
@@ -369,6 +463,52 @@ Item {
     root.conflictText = ""
     root.conflictRow = null
     root.deleteConfirm = true
+  }
+
+  // Rename edits text, so binds are un-suspended for it (like the add
+  // dialog's text stages); Esc back to capture suspends them again.
+  function enterRename() {
+    if (!root.captureRow || root.applying) return
+    root.capturedMods = []
+    root.capturedKeyToken = ""
+    root.capturedKeyLabel = ""
+    root.pendingMods = []
+    root.conflictText = ""
+    root.conflictRow = null
+    root.deleteConfirm = false
+    root.renameMode = true
+    renameInput.text = root.captureRow.description
+    root.setBindsSuspended(false)
+    Qt.callLater(function() { renameInput.forceActiveFocus(); renameInput.selectAll() })
+  }
+
+  function leaveRename() {
+    root.renameMode = false
+    root.setBindsSuspended(true)
+    Qt.callLater(function() { keyCatcher.forceActiveFocus() })
+  }
+
+  // A custom bind is renamed in place in bindings.lua; a default goes into
+  // keybind-renames.lua, and typing its stock name back drops the entry.
+  function applyRename() {
+    if (!root.captureRow || root.applying) return
+    var name = renameInput.text.trim()
+    if (!name) return
+    if (name === root.captureRow.description) {
+      root.closeCapture()
+      return
+    }
+    var original = root.originalFor(root.captureRow.normalized)
+    var custom = root.customBinds[original]
+    root.applying = true
+    if (custom) {
+      applyProc.command = [root.pluginDir + "/update-bind.sh", "--description", custom.combo, name]
+    } else if (name === root.captureRow.stockDescription) {
+      applyProc.command = [root.pluginDir + "/apply-remap.sh", "unrename", original]
+    } else {
+      applyProc.command = [root.pluginDir + "/apply-remap.sh", "rename", original, name]
+    }
+    applyProc.running = true
   }
 
   // A custom bind loses its o.bind line (remove-bind.sh); everything else is
@@ -428,9 +568,13 @@ Item {
     }
     // Bare Delete asks to delete the binding (reserved like Backspace);
     // modified combos such as Super+Delete stay capturable. The add dialog
-    // has nothing to delete.
+    // has nothing to delete. Bare F2 renames, for the same reasons.
     if (event.key === Qt.Key_Delete && bare && !root.altgrHeld && !root.addOpen) {
       root.enterDeleteConfirm()
+      return
+    }
+    if (event.key === Qt.Key_F2 && bare && !root.altgrHeld && !root.addOpen) {
+      root.enterRename()
       return
     }
 
@@ -582,6 +726,16 @@ Item {
   }
 
   FileView {
+    id: renamesFile
+    path: Quickshell.env("HOME") + "/.config/hypr/keybind-renames.lua"
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.loadRenames(text())
+    onLoadFailed: root.loadRenames("")
+    onFileChanged: reload()
+  }
+
+  FileView {
     id: bindingsFile
     path: Quickshell.env("HOME") + "/.config/hypr/bindings.lua"
     watchChanges: true
@@ -637,6 +791,12 @@ Item {
         }
         Keys.onPressed: function(event) {
           if (root.captureOpen) {
+            // Rename keeps focus in a TextInput; only a stray Escape lands here.
+            if (root.renameMode) {
+              if (event.key === Qt.Key_Escape) root.leaveRename()
+              event.accepted = true
+              return
+            }
             root.handleCaptureKey(event)
             return
           }
@@ -679,8 +839,16 @@ Item {
             root.select(6)
             event.accepted = true
           } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
-            if (root.cursorActive) root.openCapture(root.selectedIndex)
-            else if (displayModel.count > 0) root.cursorActive = true
+            var kind = root.selectedKind()
+            if (kind === "bind") root.openCapture(root.selectedIndex)
+            else if (kind === "removed") root.openReset(root.selectedIndex, "restore")
+            else if (!root.cursorActive && displayModel.count > 0) root.cursorActive = true
+            event.accepted = true
+          } else if (event.key === Qt.Key_Delete) {
+            if (root.selectedKind() === "bind") root.openDelete(root.selectedIndex)
+            event.accepted = true
+          } else if (event.key === Qt.Key_F2) {
+            if (root.selectedKind() === "bind") root.openRename(root.selectedIndex)
             event.accepted = true
           } else if (event.text && event.text.length === 1 && event.text.charCodeAt(0) >= 32 && event.text.charCodeAt(0) !== 127) {
             root.setFilter(root.filterText + event.text)
@@ -718,7 +886,7 @@ Item {
             anchors.right: addButton.left
             anchors.rightMargin: Style.space(14)
             anchors.verticalCenter: parent.verticalCenter
-            text: "Enter to change · Esc to close"
+            text: "Enter change · F2 rename · Del delete · Esc close"
             color: root.foreground
             opacity: 0.4
             font.family: root.fontFamily
@@ -771,20 +939,27 @@ Item {
             delegate: Rectangle {
               id: row
               required property int index
+              required property string kind
               required property string normalized
               required property string comboPretty
               required property string description
               required property bool changed
+              required property bool renamed
 
-              readonly property bool hasCursor: root.cursorActive && index === root.selectedIndex
+              readonly property bool isHeader: kind === "header"
+              readonly property bool isRemoved: kind === "removed"
+              readonly property bool hasCursor: !isHeader && root.cursorActive && index === root.selectedIndex
+              readonly property color textColor: hasCursor ? root.selectedText : root.foreground
+              readonly property int buttonHeight: Math.min(root.rowHeight - Style.space(12), Style.space(28))
 
               width: ListView.view.width
-              height: root.rowHeight
+              height: isHeader ? Style.space(30) : root.rowHeight
               radius: root.cornerRadius
               color: hasCursor ? root.selectedBackground : "transparent"
 
               MouseArea {
                 anchors.fill: parent
+                enabled: !row.isHeader
                 hoverEnabled: true
                 onPositionChanged: function(mouse) { root.selectFromPointer(row.index, row, mouse) }
                 onClicked: {
@@ -793,7 +968,36 @@ Item {
                 }
               }
 
+              // Section header for the removed binds below the live list.
               Row {
+                visible: row.isHeader
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(12)
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: Style.space(4)
+                spacing: Style.space(10)
+
+                Text {
+                  text: row.description
+                  color: root.foreground
+                  opacity: 0.55
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                  font.bold: true
+                }
+
+                Text {
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: "Enter or Restore brings a binding back"
+                  color: root.foreground
+                  opacity: 0.35
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                }
+              }
+
+              Row {
+                visible: !row.isHeader
                 anchors.fill: parent
                 anchors.leftMargin: Style.space(12)
                 anchors.rightMargin: Style.space(12)
@@ -809,10 +1013,12 @@ Item {
 
                     Text {
                       text: row.comboPretty
-                      color: row.hasCursor ? root.selectedText : root.foreground
+                      color: row.textColor
+                      opacity: row.isRemoved ? 0.5 : 1
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.body
                       font.bold: true
+                      font.strikeout: row.isRemoved
                     }
 
                     Text {
@@ -822,8 +1028,7 @@ Item {
                       // shrink the hit area under the pointer and flicker.
                       width: badgeMetrics.width
                       text: badgeArea.containsMouse ? "· reset" : "· changed"
-                      color: badgeArea.containsMouse ? root.warningColor
-                           : (row.hasCursor ? root.selectedText : root.foreground)
+                      color: badgeArea.containsMouse ? root.warningColor : row.textColor
                       opacity: badgeArea.containsMouse ? 1 : 0.55
                       font.family: root.fontFamily
                       font.pixelSize: Style.font.caption
@@ -844,53 +1049,137 @@ Item {
                         onClicked: {
                           root.cursorActive = true
                           root.selectedIndex = row.index
-                          root.openReset(row.index)
+                          root.openReset(row.index, "combo")
                         }
                       }
                     }
                   }
                 }
 
-                Text {
-                  width: parent.width - Style.space(230) - changeButton.width - parent.spacing * 2
+                // Description plus the renamed marker (defaults only; a
+                // custom bind's name lives in its own o.bind line).
+                Item {
+                  id: descriptionSlot
+                  width: parent.width - Style.space(230) - actionRow.width - parent.spacing * 2
                   height: parent.height
-                  text: row.description
-                  color: row.hasCursor ? root.selectedText : root.foreground
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.body
-                  elide: Text.ElideRight
-                  verticalAlignment: Text.AlignVCenter
+
+                  Row {
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: Style.space(6)
+
+                    Text {
+                      width: Math.min(implicitWidth, descriptionSlot.width
+                                      - (row.renamed ? renamedMetrics.width + Style.space(6) : 0))
+                      text: row.description
+                      color: row.textColor
+                      opacity: row.isRemoved ? 0.5 : 1
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.body
+                      elide: Text.ElideRight
+                    }
+
+                    Text {
+                      visible: row.renamed
+                      anchors.verticalCenter: parent.verticalCenter
+                      width: renamedMetrics.width
+                      text: renamedArea.containsMouse ? "· reset name" : "· renamed"
+                      color: renamedArea.containsMouse ? root.warningColor : row.textColor
+                      opacity: renamedArea.containsMouse ? 1 : 0.55
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+
+                      TextMetrics {
+                        id: renamedMetrics
+                        font.family: root.fontFamily
+                        font.pixelSize: Style.font.caption
+                        text: "· reset name"
+                      }
+
+                      MouseArea {
+                        id: renamedArea
+                        anchors.fill: parent
+                        anchors.margins: -Style.space(4)
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                          root.cursorActive = true
+                          root.selectedIndex = row.index
+                          root.openReset(row.index, "name")
+                        }
+                      }
+                    }
+                  }
                 }
 
-                Rectangle {
-                  id: changeButton
+                // Live rows: a small delete button (opens the dialog in its
+                // confirm step, never one-click) and Change. Removed rows: Restore.
+                Row {
+                  id: actionRow
                   anchors.verticalCenter: parent.verticalCenter
-                  width: changeLabel.implicitWidth + Style.space(20)
-                  height: Math.min(root.rowHeight - Style.space(12), Style.space(28))
-                  radius: root.cornerRadius
-                  color: changeArea.containsMouse ? root.selectedBackground : "transparent"
-                  border.color: Util.alpha(row.hasCursor ? root.selectedText : root.foreground, 0.4)
-                  border.width: 1
-                  opacity: row.hasCursor || changeArea.containsMouse ? 1 : 0.55
+                  spacing: Style.space(6)
 
-                  Text {
-                    id: changeLabel
-                    anchors.centerIn: parent
-                    text: "Change"
-                    color: changeArea.containsMouse ? root.selectedText : (row.hasCursor ? root.selectedText : root.foreground)
-                    font.family: root.fontFamily
-                    font.pixelSize: Style.font.caption
+                  Rectangle {
+                    id: deleteButton
+                    visible: !row.isRemoved
+                    width: row.buttonHeight
+                    height: row.buttonHeight
+                    radius: root.cornerRadius
+                    color: deleteButtonArea.containsMouse ? Util.alpha(root.warningColor, 0.18) : "transparent"
+                    border.color: deleteButtonArea.containsMouse ? root.warningColor : Util.alpha(row.textColor, 0.4)
+                    border.width: 1
+                    opacity: row.hasCursor || deleteButtonArea.containsMouse ? 1 : 0.55
+
+                    Text {
+                      anchors.centerIn: parent
+                      text: "×"
+                      color: deleteButtonArea.containsMouse ? root.warningColor : row.textColor
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.body
+                    }
+
+                    MouseArea {
+                      id: deleteButtonArea
+                      anchors.fill: parent
+                      hoverEnabled: true
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: {
+                        root.cursorActive = true
+                        root.selectedIndex = row.index
+                        root.openDelete(row.index)
+                      }
+                    }
                   }
 
-                  MouseArea {
-                    id: changeArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                      root.cursorActive = true
-                      root.selectedIndex = row.index
-                      root.openCapture(row.index)
+                  Rectangle {
+                    id: changeButton
+                    width: changeLabel.implicitWidth + Style.space(20)
+                    height: row.buttonHeight
+                    radius: root.cornerRadius
+                    color: changeArea.containsMouse ? root.selectedBackground : "transparent"
+                    border.color: Util.alpha(row.textColor, 0.4)
+                    border.width: 1
+                    opacity: row.hasCursor || changeArea.containsMouse ? 1 : 0.55
+
+                    Text {
+                      id: changeLabel
+                      anchors.centerIn: parent
+                      text: row.isRemoved ? "Restore" : "Change"
+                      color: changeArea.containsMouse ? root.selectedText : row.textColor
+                      font.family: root.fontFamily
+                      font.pixelSize: Style.font.caption
+                    }
+
+                    MouseArea {
+                      id: changeArea
+                      anchors.fill: parent
+                      hoverEnabled: true
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: {
+                        root.cursorActive = true
+                        root.selectedIndex = row.index
+                        if (row.isRemoved) root.openReset(row.index, "restore")
+                        else root.openCapture(row.index)
+                      }
                     }
                   }
                 }
@@ -951,7 +1240,8 @@ Item {
               text: root.deleteConfirm
                   ? (root.captureRow && root.captureRow.custom
                       ? "Delete this custom binding? Its o.bind line is removed from bindings.lua."
-                      : "Remove this binding? Restore it later by deleting its line in keybind-remaps.lua.")
+                      : "Remove this binding? It moves to the Removed section, where Restore brings it back.")
+                  : root.renameMode ? "Type the new name and press ENTER."
                   : "Press desired key combination and then press ENTER."
               color: root.deleteConfirm ? root.warningColor : root.foreground
               font.family: root.fontFamily
@@ -1023,6 +1313,44 @@ Item {
               }
             }
 
+            // Rename field; a custom bind is renamed in place, a default
+            // through keybind-renames.lua.
+            Rectangle {
+              visible: root.renameMode
+              width: parent.width
+              height: Style.space(38)
+              radius: root.cornerRadius
+              color: "transparent"
+              border.color: root.selectedBackground
+              border.width: 2
+
+              TextInput {
+                id: renameInput
+                anchors.fill: parent
+                anchors.leftMargin: Style.space(12)
+                anchors.rightMargin: Style.space(12)
+                verticalAlignment: TextInput.AlignVCenter
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                clip: true
+                onAccepted: root.applyRename()
+                Keys.onEscapePressed: root.leaveRename()
+              }
+
+              Text {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: Style.space(12)
+                visible: renameInput.text === ""
+                text: "New name"
+                color: root.foreground
+                opacity: 0.35
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+              }
+            }
+
             Text {
               width: parent.width
               visible: root.conflictText !== ""
@@ -1035,22 +1363,44 @@ Item {
               wrapMode: Text.Wrap
             }
 
-            Text {
+            Row {
               anchors.horizontalCenter: parent.horizontalCenter
-              visible: !root.applying
-              text: root.deleteConfirm ? "Confirm delete" : "Delete this binding…"
-              color: root.warningColor
-              opacity: deleteArea.containsMouse ? 1 : 0.7
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
+              visible: !root.applying && !root.renameMode
+              spacing: Style.space(16)
 
-              MouseArea {
-                id: deleteArea
-                anchors.fill: parent
-                anchors.margins: -Style.space(4)
-                hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: root.deleteConfirm ? root.applyDelete() : root.enterDeleteConfirm()
+              Text {
+                visible: !root.deleteConfirm
+                text: "Rename…"
+                color: root.foreground
+                opacity: renameArea.containsMouse ? 1 : 0.7
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+
+                MouseArea {
+                  id: renameArea
+                  anchors.fill: parent
+                  anchors.margins: -Style.space(4)
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.enterRename()
+                }
+              }
+
+              Text {
+                text: root.deleteConfirm ? "Confirm delete" : "Delete this binding…"
+                color: root.warningColor
+                opacity: deleteArea.containsMouse ? 1 : 0.7
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+
+                MouseArea {
+                  id: deleteArea
+                  anchors.fill: parent
+                  anchors.margins: -Style.space(4)
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.deleteConfirm ? root.applyDelete() : root.enterDeleteConfirm()
+                }
               }
             }
 
@@ -1058,7 +1408,8 @@ Item {
               width: parent.width
               text: root.applying ? "Applying…"
                   : root.deleteConfirm ? "Enter delete · Esc back"
-                  : "Enter apply · Esc cancel · Backspace clear · Del delete"
+                  : root.renameMode ? "Enter apply · Esc back"
+                  : "Enter apply · Esc cancel · Backspace clear · F2 rename · Del delete"
               color: root.foreground
               opacity: 0.4
               font.family: root.fontFamily
@@ -1107,10 +1458,7 @@ Item {
 
             Text {
               width: parent.width
-              text: root.resetRow
-                  ? "Reset " + root.resetRow.comboPretty + " to its default "
-                    + KeybindModel.prettyCombo(root.originalFor(root.resetRow.normalized), root.xkbMap) + "?"
-                  : ""
+              text: root.resetPrompt()
               color: root.foreground
               font.family: root.fontFamily
               font.pixelSize: Style.font.body
@@ -1131,7 +1479,8 @@ Item {
 
             Text {
               width: parent.width
-              text: root.applying ? "Applying…" : "Enter reset · Esc cancel"
+              text: root.applying ? "Applying…"
+                  : "Enter " + (root.resetKind === "restore" ? "restore" : "reset") + " · Esc cancel"
               color: root.foreground
               opacity: 0.4
               font.family: root.fontFamily
