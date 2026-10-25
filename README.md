@@ -103,9 +103,9 @@ untouched.
   **Del** or the **×** button opens it straight at the delete confirmation,
   **F2** straight at the rename field.
 - In the dialog: press the new combination, then **Enter** to apply.
-  **Backspace** clears. **Esc** cancels. **Del** deletes the binding after
-  an Enter confirmation, **F2** renames it (bare Del and F2 are therefore
-  not capturable as combos; modified combos like Super+Del still are).
+  **Backspace** clears. **Esc** cancels. **Del** records the Delete key;
+  use **Delete this binding…** to remove a binding. **F2** renames it and
+  remains reserved while recording.
 - Capturing a binding's original combination also restores its default.
   Typing a default's stock name back removes its rename.
 - Removed bindings are listed in a **Removed** section at the bottom of the

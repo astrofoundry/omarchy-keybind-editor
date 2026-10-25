@@ -575,13 +575,8 @@ Item {
       root.conflictRow = null
       return
     }
-    // Bare Delete asks to delete the binding (reserved like Backspace);
-    // modified combos such as Super+Delete stay capturable. The add dialog
-    // has nothing to delete. Bare F2 renames, for the same reasons.
-    if (event.key === Qt.Key_Delete && bare && !root.altgrHeld && !root.addOpen) {
-      root.enterDeleteConfirm()
-      return
-    }
+    // Delete is a valid shortcut key. Removal requires the explicit link
+    // below the recorder, so trying Delete + Enter cannot remove a binding.
     if (event.key === Qt.Key_F2 && bare && !root.altgrHeld && !root.addOpen) {
       root.enterRename()
       return
@@ -1418,7 +1413,7 @@ Item {
               text: root.applying ? "Applying…"
                   : root.deleteConfirm ? "Enter delete · Esc back"
                   : root.renameMode ? "Enter apply · Esc back"
-                  : "Enter apply · Esc cancel · Backspace clear · F2 rename · Del delete"
+                  : "Enter apply · Esc cancel · Backspace clear · F2 rename"
               color: root.foreground
               opacity: 0.4
               font.family: root.fontFamily
